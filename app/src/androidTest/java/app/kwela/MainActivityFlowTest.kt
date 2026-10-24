@@ -2,12 +2,14 @@ package app.kwela
 
 import android.content.Intent
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
@@ -28,8 +30,8 @@ class MainActivityFlowTest {
         })
         compose.onNode(hasText("Email address", substring = true)).performTextInput("tester@example.test")
         compose.onNodeWithText("Continue").performClick()
-        compose.onNodeWithText("For this local demo, use 123456. No email is sent.").assertIsDisplayed()
-        compose.onNode(hasText("6-digit code", substring = true)).performTextInput("123456")
+        compose.onNodeWithText("Enter the 6-digit code to continue.").assertIsDisplayed()
+        compose.onNode(hasText("6-digit code", substring = true) and hasSetTextAction()).performTextInput("123456")
         compose.onNodeWithText("Sign in").performClick()
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("Your next opportunity starts here.").fetchSemanticsNodes().isNotEmpty()
@@ -49,13 +51,11 @@ class MainActivityFlowTest {
 
         compose.onNodeWithContentDescription("Files").performClick()
         compose.onNodeWithText("Your files will appear here").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Jobs").performClick()
-        compose.onNodeWithText("Examples only. Live listings are not connected yet.").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Applications").performClick()
-        compose.onNodeWithText("No applications yet. Ask Kwela in Chat, or discuss a job from Jobs.").assertIsDisplayed()
         compose.onNodeWithText("Kwela").performClick()
         compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Notifications").assertIsDisplayed()
+        compose.onNodeWithText("Theme").assertIsDisplayed()
+        compose.onNodeWithText("Open-source licenses").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Close").performClick()
         compose.onNodeWithContentDescription("Chat").performClick()
         compose.onNodeWithText("Your next opportunity starts here.").assertIsDisplayed()

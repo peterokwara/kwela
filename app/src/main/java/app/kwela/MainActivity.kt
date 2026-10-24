@@ -1,6 +1,8 @@
 package app.kwela
 
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import android.app.Activity
 import android.Manifest
 import android.content.pm.PackageManager
@@ -24,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -62,9 +65,9 @@ import app.kwela.domain.ChatTimeHeader
 import app.kwela.domain.DocumentSummary
 import app.kwela.domain.ReviewDecision
 import app.kwela.domain.TaskStatus
+import app.kwela.domain.ThemeMode
 import app.kwela.domain.TaskSummary
 import app.kwela.ui.KwelaUiState
-import app.kwela.ui.sampleOpportunities
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
@@ -124,7 +127,7 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
             MainActivity.sharedText = null
         }
     }
-    KwelaTheme {
+    KwelaTheme(darkTheme = state.themeMode.useDark(isSystemInDarkTheme())) {
         val colors = MaterialTheme.colorScheme
         val view = LocalView.current
         val window = (context as? Activity)?.window
@@ -148,12 +151,10 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                     val reviewCount = state.tasks.count { it.taskStatus() == TaskStatus.WAITING_FOR_USER }
                     val openProfile = { profileTab = ProfileTab.ACTIVITY; vm.setScreen(AppScreen.PROFILE) }
                     if (state.screen == AppScreen.PROFILE) {
-                        ProfileScreen(state, profileTab, { profileTab = it }, { vm.setScreen(AppScreen.CHAT) }, vm::review, vm::setNotificationsEnabled, vm::signOut, vm::deleteLocalData)
+                        ProfileScreen(state, profileTab, { profileTab = it }, { vm.setScreen(AppScreen.CHAT) }, vm::review, vm::setNotificationsEnabled, vm::setThemeMode, vm::signOut, vm::deleteLocalData, vm::startTestTask)
                     } else MainShell(state.screen, vm::setScreen, reviewCount, openProfile) {
                         when (state.screen) {
-                            AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::startSampleTask, vm::cancelTask, vm::attachFile)
-                            AppScreen.JOBS -> JobsScreen { prompt -> vm.sendSuggestion(prompt); vm.setScreen(AppScreen.CHAT) }
-                            AppScreen.APPLICATIONS -> ApplicationsScreen(state.tasks) { profileTab = ProfileTab.REVIEW; vm.setScreen(AppScreen.PROFILE) }
+                            AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile)
                             AppScreen.FILES -> FilesScreen(state.documents)
                         }
                     }
@@ -172,15 +173,13 @@ private fun LoginScreen(email: String, otp: Boolean, error: String?, onEmail: (S
         Spacer(Modifier.height(24.dp))
         Text(if (otp) "Check your email" else "Welcome to Kwela", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = colors.onSurface)
         Spacer(Modifier.height(8.dp))
-        Text(if (otp) "Enter the 6-digit demo code to continue." else "A little help with your next application.", color = colors.onSurfaceVariant)
+        Text(if (otp) "Enter the 6-digit code to continue." else "A little help with your next application.", color = colors.onSurfaceVariant)
         Spacer(Modifier.height(28.dp))
         if (!otp) {
             OutlinedTextField(email, onEmail, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
             Spacer(Modifier.height(16.dp))
             Button(onClick = request, Modifier.fillMaxWidth().height(52.dp), shape = CircleShape) { Text("Continue") }
         } else {
-            Text("For this local demo, use 123456. No email is sent.", color = colors.onSurfaceVariant)
-            Spacer(Modifier.height(16.dp))
             OutlinedTextField(code, { if (it.length <= 6 && it.all(Char::isDigit)) code = it }, Modifier.fillMaxWidth(), label = { Text("6-digit code") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
             Spacer(Modifier.height(16.dp))
             Button(onClick = { verify(code) }, Modifier.fillMaxWidth().height(52.dp), shape = CircleShape) { Text("Sign in") }
@@ -188,7 +187,7 @@ private fun LoginScreen(email: String, otp: Boolean, error: String?, onEmail: (S
         }
         if (error != null) { Spacer(Modifier.height(8.dp)); Text(error, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(28.dp))
-        Text("Demo data stays on this device.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        Text("Your chats and files stay on this device.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
     }
 }
 
@@ -202,12 +201,8 @@ private fun BrandMark() {
 }
 
 private object LucideIcons {
-    val Briefcase = com.composables.icons.lucide.R.drawable.lucide_ic_briefcase
-    val Clock = com.composables.icons.lucide.R.drawable.lucide_ic_clock
     val Folder = com.composables.icons.lucide.R.drawable.lucide_ic_folder
-    val ListChecks = com.composables.icons.lucide.R.drawable.lucide_ic_list_checks
     val MessageCircle = com.composables.icons.lucide.R.drawable.lucide_ic_message_circle
-    val SquareCheck = com.composables.icons.lucide.R.drawable.lucide_ic_square_check_big
     val X = com.composables.icons.lucide.R.drawable.lucide_ic_x
 }
 
@@ -222,8 +217,8 @@ private fun MainShell(screen: AppScreen, select: (AppScreen) -> Unit, reviewCoun
     val keyboardOpen = WindowInsets.isImeVisible
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
-        topBar = { KwelaTopBar(openProfile) },
-        bottomBar = { if (!keyboardOpen) KwelaTabBar(screen, select, reviewCount) }
+        topBar = { KwelaTopBar(reviewCount, openProfile) },
+        bottomBar = { if (!keyboardOpen) KwelaTabBar(screen, select) }
     ) { padding -> Box(Modifier.padding(padding)) { content() } }
 }
 
@@ -236,10 +231,10 @@ private fun KwelaAvatar(size: Dp) {
 }
 
 @Composable
-private fun KwelaTopBar(onAvatar: () -> Unit) {
+private fun KwelaTopBar(reviewCount: Int, onAvatar: () -> Unit) {
     Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).windowInsetsPadding(WindowInsets.statusBars).height(72.dp), Alignment.Center) {
         Column(Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = "Open profile", role = Role.Button, onClick = onAvatar).padding(horizontal = 16.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            KwelaAvatar(40.dp)
+            BadgedBox(badge = { if (reviewCount > 0) Badge() }) { KwelaAvatar(40.dp) }
             Text("Kwela", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         }
     }
@@ -249,13 +244,11 @@ private class Tab(val screen: AppScreen, val label: String, @DrawableRes val ico
 
 private val tabs = listOf(
     Tab(AppScreen.CHAT, "Chat", LucideIcons.MessageCircle),
-    Tab(AppScreen.JOBS, "Jobs", LucideIcons.Briefcase),
-    Tab(AppScreen.APPLICATIONS, "Applications", LucideIcons.ListChecks),
     Tab(AppScreen.FILES, "Files", LucideIcons.Folder)
 )
 
 @Composable
-private fun KwelaTabBar(screen: AppScreen, select: (AppScreen) -> Unit, reviewCount: Int) {
+private fun KwelaTabBar(screen: AppScreen, select: (AppScreen) -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(Modifier.fillMaxWidth().background(colors.surface).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Surface(shape = RoundedCornerShape(32.dp), color = colors.surfaceContainer) {
@@ -264,68 +257,10 @@ private fun KwelaTabBar(screen: AppScreen, select: (AppScreen) -> Unit, reviewCo
                     val isSelected = tab.screen == screen
                     Box(Modifier.weight(1f).fillMaxHeight().clickable(remember { MutableInteractionSource() }, null, role = Role.Tab) { select(tab.screen) }.semantics { contentDescription = tab.label; selected = isSelected }, Alignment.Center) {
                         Box(Modifier.size(width = 64.dp, height = 44.dp).background(if (isSelected) colors.surfaceContainerHighest else Color.Transparent, CircleShape), Alignment.Center) {
-                            BadgedBox(badge = { if (tab.screen == AppScreen.APPLICATIONS && reviewCount > 0) Badge() }) {
-                                Icon(painterResource(tab.icon), null, Modifier.size(24.dp), tint = colors.onSurface)
-                            }
+                            Icon(painterResource(tab.icon), null, Modifier.size(24.dp), tint = colors.onSurface)
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PageHeading(title: String, subtitle: String) {
-    Column(Modifier.padding(bottom = 8.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun JobsScreen(discuss: (String) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { PageHeading("Jobs", "Examples only. Live listings are not connected yet.") }
-        items(sampleOpportunities) { job ->
-            Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceContainer) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text(job.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
-                    Text("${job.company} · ${job.location}", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    Text(job.summary, color = colors.onSurface)
-                    TextButton(onClick = { discuss(job.discussPrompt) }, Modifier.padding(top = 4.dp)) {
-                        Icon(painterResource(LucideIcons.MessageCircle), null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp)); Text("Discuss")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ApplicationsScreen(tasks: List<ApplicationTaskEntity>, openReview: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
-        item { PageHeading("Applications", "What Kwela is working on for you.") }
-        if (tasks.isEmpty()) {
-            item { Text("No applications yet. Ask Kwela in Chat, or discuss a job from Jobs.", color = colors.onSurfaceVariant) }
-        } else {
-            item {
-                GroupedList(tasks.sortedByDescending { it.updatedAt }.map { task ->
-                    val status = task.taskStatus()
-                    ListRow(task.title, ActivityTimeline.describe(status), onClick = if (status == TaskStatus.WAITING_FOR_USER) openReview else null, trailing = {
-                        when (status) {
-                            TaskStatus.COMPLETED -> Icon(painterResource(LucideIcons.SquareCheck), "Completed", Modifier.size(24.dp), tint = colors.primary)
-                            TaskStatus.RUNNING -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                            TaskStatus.QUEUED -> Icon(painterResource(LucideIcons.Clock), "Queued", Modifier.size(24.dp), tint = colors.onSurfaceVariant)
-                            TaskStatus.WAITING_FOR_USER -> Text("Review", style = MaterialTheme.typography.labelLarge, color = colors.primary)
-                            else -> Unit
-                        }
-                    })
-                })
             }
         }
     }
@@ -334,7 +269,7 @@ private fun ApplicationsScreen(tasks: List<ApplicationTaskEntity>, openReview: (
 @Composable
 private fun ProfileScreen(
     state: KwelaUiState, tab: ProfileTab, setTab: (ProfileTab) -> Unit, close: () -> Unit, review: (ApplicationTaskEntity, ReviewDecision) -> Unit,
-    toggleNotifications: (Boolean) -> Unit, signOut: () -> Unit, deleteData: () -> Unit
+    toggleNotifications: (Boolean) -> Unit, setThemeMode: (ThemeMode) -> Unit, signOut: () -> Unit, deleteData: () -> Unit, runTestTask: () -> Unit
 ) {
     BackHandler(onBack = close)
     val colors = MaterialTheme.colorScheme
@@ -363,7 +298,7 @@ private fun ProfileScreen(
             when (tab) {
                 ProfileTab.ACTIVITY -> ActivityList(state.tasks, state.documents)
                 ProfileTab.REVIEW -> ReviewList(state.tasks, waiting, review)
-                ProfileTab.SETTINGS -> SettingsScreen(state.email.orEmpty(), state.notificationsEnabled, toggleNotifications, signOut, deleteData)
+                ProfileTab.SETTINGS -> SettingsScreen(state.email.orEmpty(), state.notificationsEnabled, toggleNotifications, state.themeMode, setThemeMode, signOut, deleteData, runTestTask)
             }
         }
     }
@@ -399,7 +334,7 @@ private fun ReviewList(tasks: List<ApplicationTaskEntity>, waiting: List<Applica
             Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceContainer) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Send “${task.title}”?", style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
-                    Text("Kwela has finished and wants your OK before sending. In this demo nothing leaves your phone.", color = colors.onSurfaceVariant)
+                    Text("Kwela has finished and wants your OK before sending.", color = colors.onSurfaceVariant)
                     Button(onClick = { review(task, ReviewDecision.APPROVE) }, Modifier.fillMaxWidth()) { Text("Approve") }
                     FilledTonalButton(onClick = { review(task, ReviewDecision.DENY) }, Modifier.fillMaxWidth(), colors = ButtonDefaults.filledTonalButtonColors(containerColor = colors.surfaceContainerHighest, contentColor = colors.onSurface)) { Text("Deny") }
                 }
@@ -413,18 +348,12 @@ private fun ReviewList(tasks: List<ApplicationTaskEntity>, waiting: List<Applica
 }
 
 @Composable
-private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<ApplicationTaskEntity>, draft: String, setDraft: (String) -> Unit, send: () -> Unit, suggestion: (String) -> Unit, startTask: () -> Unit, cancelTask: (ApplicationTaskEntity) -> Unit, attach: (String, String) -> Unit) {
+private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<ApplicationTaskEntity>, draft: String, setDraft: (String) -> Unit, send: () -> Unit, suggestion: (String) -> Unit, cancelTask: (ApplicationTaskEntity) -> Unit, attach: (String, String) -> Unit) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val now = remember { System.currentTimeMillis() }
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) { if (messages.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1) }
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { startTask() }
-    val startWithPermission = {
-        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else startTask()
-    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -441,7 +370,6 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
                     Spacer(Modifier.height(20.dp)); Text("What would you like help with?", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
                 }
                 items(chatSuggestions) { item -> SuggestionCard(item.label) { suggestion(item.prompt) } }
-                item { TextButton(onClick = startWithPermission, Modifier.fillMaxWidth(), colors = ButtonDefaults.textButtonColors(contentColor = colors.onSurfaceVariant)) { Text("Try a sample task · creates example files") } }
             }
         } else {
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -454,7 +382,6 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
                     }
                 }
                 items(tasks.filter { it.status == "RUNNING" || it.status == "QUEUED" }) { task -> TaskCard(task, { cancelTask(task) }) }
-                item { TextButton(onClick = startWithPermission, Modifier.fillMaxWidth(), colors = ButtonDefaults.textButtonColors(contentColor = colors.onSurfaceVariant)) { Text("Try a sample task") } }
             }
         }
         Row(Modifier.fillMaxWidth().imePadding().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
@@ -504,7 +431,7 @@ private fun TaskCard(task: ApplicationTaskEntity, cancel: () -> Unit) {
     Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-            Column(Modifier.weight(1f).padding(start = 12.dp)) { Text(task.title, fontWeight = FontWeight.SemiBold); Text(if (task.status == "QUEUED") "Waiting in queue" else "Working on this phone demo", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+            Column(Modifier.weight(1f).padding(start = 12.dp)) { Text(task.title, fontWeight = FontWeight.SemiBold); Text(if (task.status == "QUEUED") "Waiting in queue" else "Working on it", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
             TextButton(onClick = cancel, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) { Text("Cancel") }
         }
     }
@@ -549,13 +476,13 @@ private fun FilesScreen(documents: List<SavedDocumentEntity>) {
     if (documents.isEmpty()) {
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(42.dp)); Text("Your files will appear here", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
-            Spacer(Modifier.height(8.dp)); Text("Run the sample task from Chat to create example documents, or connect the backend in a later milestone.", color = colors.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp)); Text("CVs and letters Kwela creates for you are saved here.", color = colors.onSurfaceVariant)
         }
     } else {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
             item {
                 GroupedList(documents.map { doc ->
-                    ListRow(doc.title, "Example document · Tap to preview", onClick = { selected = doc }, trailing = {
+                    ListRow(doc.title, "Tap to preview", onClick = { selected = doc }, trailing = {
                         IconButton(onClick = { sharePdf(context, doc) }) { Icon(Icons.Outlined.Share, "Share PDF", tint = colors.onSurfaceVariant) }
                         IconButton(onClick = { exportDocument = doc; savePdf.launch(doc.title.substringBeforeLast('.') + ".pdf") }) { Icon(Icons.Outlined.Download, "Save PDF", tint = colors.onSurfaceVariant) }
                     })
@@ -613,19 +540,94 @@ private fun writePdf(output: OutputStream, doc: SavedDocumentEntity) {
 }
 
 @Composable
-private fun SettingsScreen(email: String, notifications: Boolean, toggleNotifications: (Boolean) -> Unit, signOut: () -> Unit, deleteData: () -> Unit) {
-    var confirmDelete by remember { mutableStateOf(false) }
-    val colors = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        GroupedList(listOf(
-            ListRow("Account", email),
-            ListRow("Notifications", "Task updates on this device", onClick = { toggleNotifications(!notifications) }, trailing = { Switch(notifications, toggleNotifications) }),
-            ListRow("Privacy", "This demo stores chat and sample documents on this device. No AI service receives your information.")
-        ))
-        GroupedList(listOf(
-            ListRow("Sign out", onClick = signOut),
-            ListRow("Delete local demo data", destructive = true, onClick = { confirmDelete = true })
-        ))
+private fun SettingsSection(title: String, rows: List<ListRow>) {
+    if (rows.isEmpty()) return
+    Column {
+        Text(title, Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        GroupedList(rows)
     }
-    if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("Delete local data?") }, text = { Text("This removes the demo conversation, tasks, and files from this phone and signs you out.") }, confirmButton = { TextButton(onClick = { confirmDelete = false; deleteData() }, colors = ButtonDefaults.textButtonColors(contentColor = colors.error)) { Text("Delete") } }, dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Keep data") } })
+}
+
+private const val LICENSES = "AndroidX, Jetpack Compose, Material 3, Room and DataStore: Apache License 2.0\n\nKotlin and kotlinx.coroutines: Apache License 2.0\n\nLucide icons: ISC License, © Lucide Contributors\n\nNoto Sans: SIL Open Font License 1.1"
+
+private fun openUrl(context: android.content.Context, url: String) {
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+}
+
+private fun sendEmail(context: android.content.Context, to: String, subject: String) {
+    val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$to")).putExtra(Intent.EXTRA_SUBJECT, subject)
+    runCatching { context.startActivity(intent) }.onFailure { Toast.makeText(context, "No email app found.", Toast.LENGTH_SHORT).show() }
+}
+
+private fun openNotificationSettings(context: android.content.Context) {
+    val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+    runCatching { context.startActivity(intent) }
+}
+
+@Composable
+private fun SettingsScreen(
+    email: String, notifications: Boolean, toggleNotifications: (Boolean) -> Unit, themeMode: ThemeMode, setThemeMode: (ThemeMode) -> Unit,
+    signOut: () -> Unit, deleteAccount: () -> Unit, runTestTask: () -> Unit
+) {
+    val context = LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    var confirmDelete by remember { mutableStateOf(false) }
+    var pickTheme by remember { mutableStateOf(false) }
+    var showLicenses by remember { mutableStateOf(false) }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> toggleNotifications(granted) }
+    val setNotifications = { enabled: Boolean ->
+        if (enabled && Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else toggleNotifications(enabled)
+    }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SettingsSection("Account", listOf(
+            ListRow("Email", email),
+            ListRow("Sign out", onClick = signOut),
+            ListRow("Delete account and data", "Removes your chats, files and sign-in details from this phone.", destructive = true, onClick = { confirmDelete = true })
+        ))
+        SettingsSection("Notifications", listOf(
+            ListRow("Task updates", "Tell me when Kwela finishes something", onClick = { setNotifications(!notifications) }, trailing = { Switch(notifications, setNotifications) }),
+            ListRow("System notification settings", onClick = { openNotificationSettings(context) })
+        ))
+        SettingsSection("Appearance", listOf(ListRow("Theme", themeMode.label, onClick = { pickTheme = true })))
+        SettingsSection("Privacy and legal", listOfNotNull(
+            BuildConfig.PRIVACY_URL.takeIf { it.isNotBlank() }?.let { url -> ListRow("Privacy policy", onClick = { openUrl(context, url) }) },
+            BuildConfig.TERMS_URL.takeIf { it.isNotBlank() }?.let { url -> ListRow("Terms of service", onClick = { openUrl(context, url) }) },
+            ListRow("Your data", "Your chats and files are stored on this phone. You can delete them at any time with Delete account and data.")
+        ))
+        SettingsSection("Support", buildList {
+            BuildConfig.SUPPORT_EMAIL.takeIf { it.isNotBlank() }?.let { to ->
+                add(ListRow("Contact support", to, onClick = { sendEmail(context, to, "Kwela support") }))
+                add(ListRow("Send feedback", onClick = { sendEmail(context, to, "Kwela feedback (${BuildConfig.VERSION_NAME})") }))
+            }
+        })
+        SettingsSection("About", listOf(
+            ListRow("Version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"),
+            ListRow("Open-source licenses", onClick = { showLicenses = true })
+        ))
+        if (BuildConfig.DEBUG) SettingsSection("Developer", listOf(ListRow("Run test task", "Debug builds only", onClick = runTestTask)))
+        Spacer(Modifier.height(16.dp))
+    }
+    if (pickTheme) AlertDialog(
+        onDismissRequest = { pickTheme = false }, title = { Text("Theme") },
+        text = {
+            Column {
+                ThemeMode.entries.forEach { mode ->
+                    Row(Modifier.fillMaxWidth().clickable { setThemeMode(mode); pickTheme = false }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = mode == themeMode, onClick = null)
+                        Spacer(Modifier.width(16.dp)); Text(mode.label)
+                    }
+                }
+            }
+        },
+        confirmButton = {}, dismissButton = { TextButton(onClick = { pickTheme = false }) { Text("Cancel") } }
+    )
+    if (showLicenses) AlertDialog(onDismissRequest = { showLicenses = false }, title = { Text("Open-source licenses") }, text = { Text(LICENSES, Modifier.verticalScroll(rememberScrollState())) }, confirmButton = { TextButton(onClick = { showLicenses = false }) { Text("Close") } })
+    if (confirmDelete) AlertDialog(
+        onDismissRequest = { confirmDelete = false }, title = { Text("Delete account and data?") },
+        text = { Text("This removes your chats, files and sign-in details from this phone and signs you out. This can’t be undone.") },
+        confirmButton = { TextButton(onClick = { confirmDelete = false; deleteAccount() }, colors = ButtonDefaults.textButtonColors(contentColor = colors.error)) { Text("Delete") } },
+        dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Keep") } }
+    )
 }

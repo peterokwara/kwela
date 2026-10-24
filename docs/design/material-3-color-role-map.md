@@ -14,7 +14,7 @@ Material groups its roles into primary, secondary, tertiary, error, surface, and
 | Loading indicator | `surface` | `primary` indicator | Material 3 `CircularProgressIndicator` default. |
 | Login brand mark | `primary` | `onPrimary` for the “K”; `onSurface` for wordmark | Primary is used as brand identity, not a second CTA. |
 | Login heading | `surface` | `onSurface` | High-emphasis content. |
-| Login instructions and local-demo notice | `surface` | `onSurfaceVariant` | Supporting copy. |
+| Login instructions and data notice | `surface` | `onSurfaceVariant` | Supporting copy. |
 | Email / OTP outlined fields | `surface` | `onSurface` input; `onSurfaceVariant` label and hint; `outline` border; `primary` focus and cursor; `error` invalid state | Keep `OutlinedTextField` defaults. Show an error state on the field itself if validation moves inline. |
 | Continue / Sign in buttons | `primary` | `onPrimary` | Main login action. Material 3 `Button` defaults. |
 | Login alternate action | `surface` | `primary` text | Low-emphasis `TextButton` default. |
@@ -24,7 +24,6 @@ Material groups its roles into primary, secondary, tertiary, error, surface, and
 | Empty-chat supporting copy and section label | `surface` | `onSurfaceVariant` | Lower-emphasis explanatory content. |
 | Recommended “Update my CV for a job” action | `primary` | `onPrimary` | Single high-emphasis action, subject to changing when the app knows whether the user has a CV. |
 | Other quick-start actions | `surface` | `onSurface` labels; `outline` border | Outlined buttons are lower emphasis. Their chevrons inherit the button content color instead of adding another primary accent. |
-| Sample-task action | `surface` | `onSurfaceVariant` | A demo affordance must remain below real job actions. |
 | Conversation composer container | `surfaceContainer` | `onSurface` | Uses a distinct navigation/control region tone and replaces a shadow-only separator. |
 | Composer outlined input | `surface` | `onSurface` input; `onSurfaceVariant` placeholder; `outline` border; `primary` focus | Material 3 `OutlinedTextField` defaults. |
 | Attach icon button | `surfaceContainerLow` | `onSurfaceVariant` | Secondary utility action. |
@@ -63,7 +62,7 @@ Material groups its roles into primary, secondary, tertiary, error, surface, and
 - Replaced the composer's shadow-only separation with a semantic tonal container.
 - Mapped the navigation bar and composer control region to `surfaceContainer`, matching Material 3's default navigation-area hierarchy.
 - Kept the app canvas on the semantic `surface` role.
-- Removed primary-colored decoration from secondary action chevrons, sample-task actions, attachment metadata, and file icons.
+- Removed primary-colored decoration from secondary action chevrons, attachment metadata, and file icons.
 - Colored both delete-action icon and text with `error`, including the confirmation action.
 - Kept `primary` for the leading CV action and actual submit/sign-in actions.
 

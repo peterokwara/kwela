@@ -11,6 +11,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
@@ -28,6 +29,15 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        // Store listing links. Set these in gradle.properties; an empty value hides the matching row in Settings.
+        fun link(name: String): String {
+            val value = providers.gradleProperty(name).orNull.orEmpty()
+            if (value.isBlank()) logger.warn("Store listing property '$name' is empty. Set it in gradle.properties before publishing.")
+            return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        }
+        buildConfigField("String", "PRIVACY_URL", link("kwela.privacyUrl"))
+        buildConfigField("String", "TERMS_URL", link("kwela.termsUrl"))
+        buildConfigField("String", "SUPPORT_EMAIL", link("kwela.supportEmail"))
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

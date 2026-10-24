@@ -3,6 +3,7 @@ package app.kwela.ui
 import app.kwela.data.local.ApplicationTaskEntity
 import app.kwela.data.local.ChatMessageEntity
 import app.kwela.data.local.SavedDocumentEntity
+import app.kwela.domain.ThemeMode
 
 data class KwelaUiState(
     val isRestoring: Boolean = true,
@@ -15,6 +16,7 @@ data class KwelaUiState(
     val tasks: List<ApplicationTaskEntity> = emptyList(),
     val documents: List<SavedDocumentEntity> = emptyList(),
     val notificationsEnabled: Boolean = true,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val loginError: String? = null
 ) {
     val activeTask: ApplicationTaskEntity?

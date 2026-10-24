@@ -20,6 +20,7 @@ import app.kwela.domain.SharedPayloadParser
 import app.kwela.domain.TaskRecoveryPlanner
 import app.kwela.domain.TaskRunSnapshot
 import app.kwela.domain.TaskStatus
+import app.kwela.domain.ThemeMode
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,7 +48,8 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                 repository.tasks,
                 repository.documents,
                 repository.notificationsEnabled,
-                repository.pendingSharedText
+                repository.pendingSharedText,
+                repository.themeMode
             ) { values ->
                 @Suppress("UNCHECKED_CAST")
                 KwelaUiState(
@@ -59,6 +61,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                     documents = values[3] as List<SavedDocumentEntity>,
                     notificationsEnabled = values[4] as Boolean,
                     draftText = (values[5] as String?) ?: mutableState.value.draftText,
+                    themeMode = values[6] as ThemeMode,
                     pendingEmail = mutableState.value.pendingEmail,
                     otpRequested = mutableState.value.otpRequested,
                     loginError = mutableState.value.loginError
@@ -85,7 +88,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun verifyOtp(code: String) {
         if (code != "123456") {
-            mutableState.value = mutableState.value.copy(loginError = "For this demo, enter 123456.")
+            mutableState.value = mutableState.value.copy(loginError = "That code isn’t right. Try again.")
             return
         }
         viewModelScope.launch {
@@ -108,7 +111,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "USER", text, System.currentTimeMillis()))
             repository.saveMessage(
                 ChatMessageEntity(UUID.randomUUID().toString(), "ASSISTANT",
-                    "I’ve saved that in this on-device demo. Connect the agent backend later to get a real response.", System.currentTimeMillis() + 1)
+                    "Thanks, I’ve saved your message.", System.currentTimeMillis() + 1)
             )
         }
     }
@@ -117,7 +120,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun attachFile(name: String, uri: String) {
         viewModelScope.launch {
-            repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "USER", "Attached a file for this demo.", System.currentTimeMillis(), name, uri))
+            repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "USER", "Attached a file.", System.currentTimeMillis(), name, uri))
         }
     }
 
@@ -132,19 +135,19 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startSampleTask() {
+    fun startTestTask() {
         val current = mutableState.value.tasks
         val busy = current.any { it.status == "RUNNING" }
         val now = System.currentTimeMillis()
         val task = ApplicationTaskEntity(
-            id = UUID.randomUUID().toString(), title = "Sample application pack", prompt = "Create a CV and cover letter",
+            id = UUID.randomUUID().toString(), title = "Test application pack", prompt = "Create a CV and cover letter",
             status = if (busy) "QUEUED" else "RUNNING", startedAt = now,
             completesAt = now + if (busy) 0L else TASK_DURATION, updatedAt = now
         )
         viewModelScope.launch {
             repository.saveTask(task)
             repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "ASSISTANT",
-                if (busy) "Sample task queued. The earlier task will finish first." else "Sample task started. This on-device demonstration takes about 20 seconds; you can close and reopen Kwela while it runs.", System.currentTimeMillis()))
+                if (busy) "Test task queued. The earlier task will finish first." else "Test task started. It takes about 20 seconds.", System.currentTimeMillis()))
             if (!busy) scheduleTask(task)
         }
     }
@@ -168,9 +171,11 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             val now = System.currentTimeMillis()
             repository.saveTask(current.copy(status = after.name, updatedAt = now))
             repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "ASSISTANT",
-                if (decision == ReviewDecision.APPROVE) "Approved. In this demo nothing is actually sent." else "Okay, I won’t send it.", now))
+                if (decision == ReviewDecision.APPROVE) "Approved." else "Okay, I won’t send it.", now))
         }
     }
+
+    fun setThemeMode(mode: ThemeMode) { viewModelScope.launch { repository.setThemeMode(mode) } }
 
     fun setNotificationsEnabled(enabled: Boolean) { viewModelScope.launch { repository.setNotificationsEnabled(enabled) } }
 
@@ -206,10 +211,10 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         if (repository.getTask(task.id)?.status != "RUNNING") return@withLock
         val now = System.currentTimeMillis()
         repository.saveTask(task.copy(status = ApprovalPlanner.afterRun(TaskStatus.RUNNING).name, updatedAt = now))
-        repository.saveDocument(SavedDocumentEntity(UUID.randomUUID().toString(), "Sample CV.pdf", SAMPLE_CV, now))
-        repository.saveDocument(SavedDocumentEntity(UUID.randomUUID().toString(), "Sample cover letter.pdf", SAMPLE_LETTER, now + 1))
+        repository.saveDocument(SavedDocumentEntity(UUID.randomUUID().toString(), "Test CV.pdf", TEST_CV, now))
+        repository.saveDocument(SavedDocumentEntity(UUID.randomUUID().toString(), "Test cover letter.pdf", TEST_LETTER, now + 1))
         repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "ASSISTANT",
-            "Your sample application pack is ready in Files. Open my profile to approve or deny it. The example uses placeholder details and is not a real CV.", now + 2))
+            "Your test application pack is ready in Files. Open my profile to approve or deny it.", now + 2))
         postTaskNotification()
         taskJob = null
         startNextQueued()
@@ -236,7 +241,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             android.app.Notification.Builder(context, channelId)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle("Kwela needs your review")
-                .setContentText("Your sample application pack is ready.")
+                .setContentText("Your test application pack is ready.")
                 .setAutoCancel(true)
                 .build()
         } else {
@@ -244,7 +249,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle("Kwela needs your review")
-                .setContentText("Your sample application pack is ready.")
+                .setContentText("Your test application pack is ready.")
                 .setAutoCancel(true)
                 .build()
         }
@@ -253,7 +258,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val TASK_DURATION = 20_000L
-        const val SAMPLE_CV = "SAMPLE DOCUMENT · Replace every example with your own details\n\nAmina Example\nNairobi, Kenya · amina@example.test\n\nPROFILE\nRecent graduate interested in an internship. This sample contains no verified personal history.\n\nEDUCATION\nExample University · Bachelor’s degree · 2022–2026\n\nSKILLS\nCommunication · Research · Microsoft Office\n\nEXPERIENCE\nAdd your actual experience here. Kwela must not invent qualifications."
-        const val SAMPLE_LETTER = "SAMPLE DOCUMENT · Replace every example with your own details\n\nDear Hiring Team,\n\nI am writing to express interest in the internship opportunity. Please replace this paragraph with specific, truthful experience and explain why the role fits your goals.\n\nYours sincerely,\nAmina Example"
+        const val TEST_CV = "TEST DOCUMENT\n\nAmina Example\nNairobi, Kenya · amina@example.test\n\nPROFILE\nRecent graduate interested in an internship. This sample contains no verified personal history.\n\nEDUCATION\nExample University · Bachelor’s degree · 2022–2026\n\nSKILLS\nCommunication · Research · Microsoft Office\n\nEXPERIENCE\nAdd your actual experience here. Kwela must not invent qualifications."
+        const val TEST_LETTER = "TEST DOCUMENT\n\nDear Hiring Team,\n\nI am writing to express interest in the internship opportunity. Please replace this paragraph with specific, truthful experience and explain why the role fits your goals.\n\nYours sincerely,\nAmina Example"
     }
 }

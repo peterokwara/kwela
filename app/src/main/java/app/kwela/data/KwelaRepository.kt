@@ -9,6 +9,7 @@ import app.kwela.data.local.ApplicationTaskEntity
 import app.kwela.data.local.ChatMessageEntity
 import app.kwela.data.local.KwelaDatabase
 import app.kwela.data.local.SavedDocumentEntity
+import app.kwela.domain.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -24,6 +25,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     val documents: Flow<List<SavedDocumentEntity>> = dao.observeDocuments()
     val signedInEmail: Flow<String?> = appContext.preferencesDataStore.data.map { it[EMAIL_KEY] }
     val pendingSharedText: Flow<String?> = appContext.preferencesDataStore.data.map { it[PENDING_SHARE_KEY] }
+    val themeMode: Flow<ThemeMode> = appContext.preferencesDataStore.data.map { ThemeMode.fromStored(it[THEME_KEY]) }
     val notificationsEnabled: Flow<Boolean> = appContext.preferencesDataStore.data.map { it[NOTIFICATIONS_KEY] ?: true }
 
     suspend fun saveMessage(message: ChatMessageEntity) = dao.saveMessage(message)
@@ -52,6 +54,10 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
         appContext.preferencesDataStore.edit { it[NOTIFICATIONS_KEY] = enabled }
     }
 
+    suspend fun setThemeMode(mode: ThemeMode) {
+        appContext.preferencesDataStore.edit { it[THEME_KEY] = mode.name }
+    }
+
     suspend fun clearUserData() {
         dao.clearMessages()
         dao.clearDocuments()
@@ -65,6 +71,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     private companion object {
         val EMAIL_KEY = stringPreferencesKey("signed_in_email")
         val PENDING_SHARE_KEY = stringPreferencesKey("pending_shared_text")
+        val THEME_KEY = stringPreferencesKey("theme_mode")
         val NOTIFICATIONS_KEY = booleanPreferencesKey("notifications_enabled")
     }
 }
