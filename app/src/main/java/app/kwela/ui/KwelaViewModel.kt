@@ -10,6 +10,13 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.kwela.KwelaApplication
+import app.kwela.data.AttachmentReader
+import app.kwela.data.remote.ApiResult
+import app.kwela.domain.AttachmentPolicy
+import app.kwela.domain.CareerReplyParser
+import app.kwela.domain.ChatRequestBuilder
+import app.kwela.domain.OutgoingMessage
+import app.kwela.domain.OutgoingRole
 import app.kwela.data.local.ApplicationTaskEntity
 import app.kwela.data.local.ChatMessageEntity
 import app.kwela.data.local.SavedDocumentEntity
@@ -21,7 +28,11 @@ import app.kwela.domain.TaskRecoveryPlanner
 import app.kwela.domain.TaskRunSnapshot
 import app.kwela.domain.TaskStatus
 import app.kwela.domain.ThemeMode
+import android.net.Uri
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +46,7 @@ import java.util.UUID
 
 class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = (application as KwelaApplication).repository
+    private val api = (application as KwelaApplication).api
     private val mutableState = MutableStateFlow(KwelaUiState())
     val state: StateFlow<KwelaUiState> = mutableState.asStateFlow()
     private var taskJob: Job? = null
@@ -52,7 +64,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                 repository.themeMode
             ) { values ->
                 @Suppress("UNCHECKED_CAST")
-                KwelaUiState(
+                mutableState.value.copy(
                     isRestoring = false,
                     email = values[0] as String?,
                     screen = if (values[0] == null) AppScreen.CHAT else mutableState.value.screen,
@@ -61,10 +73,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                     documents = values[3] as List<SavedDocumentEntity>,
                     notificationsEnabled = values[4] as Boolean,
                     draftText = (values[5] as String?) ?: mutableState.value.draftText,
-                    themeMode = values[6] as ThemeMode,
-                    pendingEmail = mutableState.value.pendingEmail,
-                    otpRequested = mutableState.value.otpRequested,
-                    loginError = mutableState.value.loginError
+                    themeMode = values[6] as ThemeMode
                 )
             }.collect { next ->
                 mutableState.value = next
@@ -104,24 +113,77 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     fun backToEmail() { mutableState.value = mutableState.value.copy(otpRequested = false, loginError = null) }
 
     fun sendDraft() {
-        val text = mutableState.value.draftText.trim()
-        if (text.isBlank()) return
-        mutableState.value = mutableState.value.copy(draftText = "")
+        val current = mutableState.value
+        val text = current.draftText.trim()
+        val attachment = current.pendingAttachment
+        if ((text.isBlank() && attachment == null) || current.isReplying) return
+        mutableState.value = current.copy(draftText = "", pendingAttachment = null, replyError = null)
         viewModelScope.launch {
-            repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "USER", text, System.currentTimeMillis()))
             repository.saveMessage(
-                ChatMessageEntity(UUID.randomUUID().toString(), "ASSISTANT",
-                    "Thanks, I’ve saved your message.", System.currentTimeMillis() + 1)
+                ChatMessageEntity(UUID.randomUUID().toString(), "USER", text.ifBlank { "Please review my file." }, System.currentTimeMillis(), attachment?.name, attachment?.uri)
             )
+            requestReply()
         }
+    }
+
+    fun retryReply() {
+        if (mutableState.value.isReplying) return
+        viewModelScope.launch { requestReply() }
+    }
+
+    fun removeAttachment() { mutableState.value = mutableState.value.copy(pendingAttachment = null) }
+
+    fun messageShown() { mutableState.value = mutableState.value.copy(message = null) }
+
+    private suspend fun requestReply() {
+        mutableState.value = mutableState.value.copy(isReplying = true, replyError = null)
+        val failure = runCatching { fetchReply() }.getOrElse { if (it is CancellationException) throw it else "Something went wrong. Please try again." }
+        mutableState.value = mutableState.value.copy(isReplying = false, replyError = failure)
+    }
+
+    /** Sends the conversation to the Kwela API and saves the reply. Returns an error message, or null on success. */
+    private suspend fun fetchReply(): String? {
+        val reader = AttachmentReader(getApplication())
+        val recent = repository.messages.first().takeLast(20)
+        val newestUserId = recent.lastOrNull { it.role == "USER" }?.id
+        val history = withContext(Dispatchers.IO) {
+            recent.map { message ->
+                // Only the newest message carries its file. Earlier files are already summarised in the saved CV profile.
+                val uri = message.attachmentUri.takeIf { message.id == newestUserId }
+                val file = uri?.let { reader.read(message.id, Uri.parse(it)) }
+                if (uri != null && file == null) return@withContext null
+                OutgoingMessage(message.id, if (message.role == "USER") OutgoingRole.USER else OutgoingRole.ASSISTANT, message.content, listOfNotNull(file))
+            }
+        } ?: return "Kwela couldn’t read your attached file. Attach it again."
+        val token = repository.deviceToken()
+        val body = ChatRequestBuilder.build(history, repository.candidateProfile.first())
+        val result = api.chat(token, body)
+        if (result is ApiResult.Failure) return result.message
+        val reply = CareerReplyParser.parse((result as ApiResult.Success).body) ?: return "Kwela sent a reply the app couldn’t read. Please try again."
+        val now = System.currentTimeMillis()
+        reply.documents.forEachIndexed { index, document ->
+            repository.saveDocument(SavedDocumentEntity(UUID.randomUUID().toString(), document.title, document.body, now + index))
+        }
+        val filesNote = if (reply.documents.isEmpty()) "" else "\n\nSaved to Files: " + reply.documents.joinToString(", ") { it.title } + "."
+        repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "ASSISTANT", reply.message + filesNote, now + reply.documents.size))
+        reply.candidateProfileJson?.let { profile ->
+            repository.saveCandidateProfile(profile)
+            api.saveProfile(token, profile)
+        }
+        return null
     }
 
     fun sendSuggestion(prompt: String) { setDraft(prompt); sendDraft() }
 
-    fun attachFile(name: String, uri: String) {
-        viewModelScope.launch {
-            repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "USER", "Attached a file.", System.currentTimeMillis(), name, uri))
+    fun attachFile(uriString: String) {
+        val file = AttachmentReader(getApplication()).describe(Uri.parse(uriString))
+        val problem = when {
+            !AttachmentPolicy.isSupported(file.name, file.mediaType) -> "Kwela can read PDF, Word, text and photo files."
+            file.sizeBytes > 0 && !AttachmentPolicy.isSmallEnough(file.sizeBytes) -> "That file is over 5 MB."
+            else -> null
         }
+        mutableState.value = if (problem != null) mutableState.value.copy(message = problem)
+        else mutableState.value.copy(pendingAttachment = PendingAttachment(file.name, uriString))
     }
 
     fun acceptSharedText(rawText: String?) {
@@ -183,9 +245,16 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repository.signOut(); mutableState.value = mutableState.value.copy(screen = AppScreen.CHAT) }
     }
 
-    fun deleteLocalData() {
-        taskJob?.cancel()
-        viewModelScope.launch { repository.clearUserData(); mutableState.value = KwelaUiState(isRestoring = false) }
+    fun deleteAccount() {
+        viewModelScope.launch {
+            val remote = if (api.isConfigured) api.deleteAccount(repository.deviceToken()) else ApiResult.Success("")
+            taskJob?.cancel()
+            repository.clearUserData()
+            mutableState.value = KwelaUiState(
+                isRestoring = false,
+                message = (remote as? ApiResult.Failure)?.let { "Removed from this phone. Kwela couldn’t be reached to remove your saved CV profile, so try again later." }
+            )
+        }
     }
 
     private fun recoverActiveTask(tasks: List<ApplicationTaskEntity>) {

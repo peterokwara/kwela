@@ -58,6 +58,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import app.kwela.ui.PendingAttachment
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import app.kwela.domain.ActivityTimeline
@@ -127,6 +129,9 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
             MainActivity.sharedText = null
         }
     }
+    LaunchedEffect(state.message) {
+        state.message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show(); vm.messageShown() }
+    }
     KwelaTheme(darkTheme = state.themeMode.useDark(isSystemInDarkTheme())) {
         val colors = MaterialTheme.colorScheme
         val view = LocalView.current
@@ -151,10 +156,10 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                     val reviewCount = state.tasks.count { it.taskStatus() == TaskStatus.WAITING_FOR_USER }
                     val openProfile = { profileTab = ProfileTab.ACTIVITY; vm.setScreen(AppScreen.PROFILE) }
                     if (state.screen == AppScreen.PROFILE) {
-                        ProfileScreen(state, profileTab, { profileTab = it }, { vm.setScreen(AppScreen.CHAT) }, vm::review, vm::setNotificationsEnabled, vm::setThemeMode, vm::signOut, vm::deleteLocalData, vm::startTestTask)
+                        ProfileScreen(state, profileTab, { profileTab = it }, { vm.setScreen(AppScreen.CHAT) }, vm::review, vm::setNotificationsEnabled, vm::setThemeMode, vm::signOut, vm::deleteAccount, vm::startTestTask)
                     } else MainShell(state.screen, vm::setScreen, reviewCount, openProfile) {
                         when (state.screen) {
-                            AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile)
+                            AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile, state.pendingAttachment, state.isReplying, state.replyError, vm::removeAttachment, vm::retryReply)
                             AppScreen.FILES -> FilesScreen(state.documents)
                         }
                     }
@@ -187,7 +192,7 @@ private fun LoginScreen(email: String, otp: Boolean, error: String?, onEmail: (S
         }
         if (error != null) { Spacer(Modifier.height(8.dp)); Text(error, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(28.dp))
-        Text("Your chats and files stay on this device.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        Text("Your chats and files are saved on this device.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
     }
 }
 
@@ -348,17 +353,16 @@ private fun ReviewList(tasks: List<ApplicationTaskEntity>, waiting: List<Applica
 }
 
 @Composable
-private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<ApplicationTaskEntity>, draft: String, setDraft: (String) -> Unit, send: () -> Unit, suggestion: (String) -> Unit, cancelTask: (ApplicationTaskEntity) -> Unit, attach: (String, String) -> Unit) {
+private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<ApplicationTaskEntity>, draft: String, setDraft: (String) -> Unit, send: () -> Unit, suggestion: (String) -> Unit, cancelTask: (ApplicationTaskEntity) -> Unit, attach: (String) -> Unit, pendingAttachment: PendingAttachment?, isReplying: Boolean, replyError: String?, removeAttachment: () -> Unit, retry: () -> Unit) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val now = remember { System.currentTimeMillis() }
     val listState = rememberLazyListState()
-    LaunchedEffect(messages.size) { if (messages.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1) }
+    LaunchedEffect(messages.size, isReplying, replyError) { if (messages.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            val name = uri.lastPathSegment?.substringAfterLast('/')?.substringBefore('?') ?: "Selected document"
-            attach(name, uri.toString())
+            attach(uri.toString())
         }
     }
     Column(Modifier.fillMaxSize()) {
@@ -382,20 +386,57 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
                     }
                 }
                 items(tasks.filter { it.status == "RUNNING" || it.status == "QUEUED" }) { task -> TaskCard(task, { cancelTask(task) }) }
+                if (isReplying) item { WorkingBubble() }
+                if (replyError != null) item { ReplyErrorCard(replyError, retry) }
             }
         }
+        if (pendingAttachment != null) AttachmentChip(pendingAttachment.name, removeAttachment)
         Row(Modifier.fillMaxWidth().imePadding().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
             Row(Modifier.weight(1f).heightIn(min = 56.dp).background(colors.surfaceContainer, RoundedCornerShape(28.dp)), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { picker.launch(arrayOf("application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")) }) { Icon(Icons.Outlined.AddCircleOutline, "Attach a CV", tint = colors.onSurfaceVariant) }
+                IconButton(onClick = { picker.launch(arrayOf("application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "image/*")) }) { Icon(Icons.Outlined.AddCircleOutline, "Attach a CV", tint = colors.onSurfaceVariant) }
                 Box(Modifier.weight(1f).padding(end = 16.dp, top = 8.dp, bottom = 8.dp)) {
                     if (draft.isEmpty()) Text("Message Kwela", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                     BasicTextField(draft, setDraft, Modifier.fillMaxWidth(), textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface), cursorBrush = SolidColor(colors.primary), maxLines = 5)
                 }
             }
-            if (draft.isNotBlank()) {
+            if ((draft.isNotBlank() || pendingAttachment != null) && !isReplying) {
                 Spacer(Modifier.width(8.dp))
                 FilledIconButton(onClick = send, Modifier.size(56.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.primaryContainer, contentColor = colors.onPrimaryContainer)) { Icon(Icons.AutoMirrored.Outlined.Send, "Send") }
             }
+        }
+    }
+}
+
+@Composable
+private fun WorkingBubble() {
+    val colors = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceContainer, modifier = Modifier.padding(end = 56.dp)) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(12.dp))
+            Text("Kwela is working on it…", color = colors.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ReplyErrorCard(message: String, retry: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(24.dp), color = colors.errorContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(message, Modifier.weight(1f), color = colors.onErrorContainer)
+            TextButton(onClick = retry) { Text("Try again", color = colors.onErrorContainer) }
+        }
+    }
+}
+
+@Composable
+private fun AttachmentChip(name: String, remove: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(16.dp), color = colors.surfaceContainerHigh, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp)) {
+        Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("📎 $name", Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge, color = colors.onSurface)
+            IconButton(remove, Modifier.size(40.dp)) { Icon(painterResource(LucideIcons.X), "Remove file", Modifier.size(18.dp), tint = colors.onSurfaceVariant) }
         }
     }
 }
@@ -594,7 +635,7 @@ private fun SettingsScreen(
         SettingsSection("Privacy and legal", listOfNotNull(
             BuildConfig.PRIVACY_URL.takeIf { it.isNotBlank() }?.let { url -> ListRow("Privacy policy", onClick = { openUrl(context, url) }) },
             BuildConfig.TERMS_URL.takeIf { it.isNotBlank() }?.let { url -> ListRow("Terms of service", onClick = { openUrl(context, url) }) },
-            ListRow("Your data", "Your chats and files are stored on this phone. You can delete them at any time with Delete account and data.")
+            ListRow("Your data", "Your chats and files are saved on this phone. Messages and files you send are processed by Kwela’s servers and OpenAI to prepare your documents, and are not kept on our servers. Your saved CV profile is kept on our server until you delete your account.")
         ))
         SettingsSection("Support", buildList {
             BuildConfig.SUPPORT_EMAIL.takeIf { it.isNotBlank() }?.let { to ->

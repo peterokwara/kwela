@@ -1,0 +1,25 @@
+{
+    "name": "kwela-api",
+    "main": "src/index.ts",
+    "compatibility_date": "2026-10-22",
+    "compatibility_flags": ["nodejs_compat"],
+    "vars": {
+        "USAGE_CAP_USD": "1",
+        "GLOBAL_USAGE_CAP_USD": "25",
+        "MAX_REQUESTS_PER_MINUTE": "4",
+        "INPUT_PRICE_PER_MILLION_USD": "0.10",
+        "OUTPUT_PRICE_PER_MILLION_USD": "0.50"
+    },
+    "browser": {
+        "binding": "BROWSER",
+        "remote": true
+    },
+    "d1_databases": [
+        {
+            "binding": "DB",
+            "database_name": "kwela",
+            "database_id": "09a40714-224c-4e35-9054-adeac23ec618",
+            "migrations_dir": "migrations"
+        }
+    ]
+}

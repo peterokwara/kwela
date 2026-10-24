@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
     id("org.jetbrains.kotlin.kapt")
 }
 
@@ -35,6 +36,7 @@ android {
             if (value.isBlank()) logger.warn("Store listing property '$name' is empty. Set it in gradle.properties before publishing.")
             return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
         }
+        buildConfigField("String", "API_BASE_URL", link("kwela.apiUrl"))
         buildConfigField("String", "PRIVACY_URL", link("kwela.privacyUrl"))
         buildConfigField("String", "TERMS_URL", link("kwela.termsUrl"))
         buildConfigField("String", "SUPPORT_EMAIL", link("kwela.supportEmail"))
@@ -69,6 +71,8 @@ dependencies {
     implementation("androidx.room:room-ktx:2.8.5")
     kapt("androidx.room:room-compiler:2.8.5")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.6.2")

@@ -1,0 +1,71 @@
+package app.kwela.domain
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+
+enum class OutgoingRole(val wireName: String) { USER("user"), ASSISTANT("assistant") }
+
+data class OutgoingFile(val id: String, val name: String, val type: String, val dataUrl: String)
+
+data class OutgoingMessage(val id: String, val role: OutgoingRole, val content: String, val files: List<OutgoingFile> = emptyList())
+
+/** Builds the JSON body the Kwela API expects for one chat turn. */
+object ChatRequestBuilder {
+    private const val MAX_MESSAGES = 20
+    private const val DEFAULT_MAX_ENCODED_FILE_CHARS = 27_000_000
+    private const val SAVED_PROFILE_NOTE = "Saved CV profile for this person. Reuse it when preparing job materials."
+
+    fun build(
+        messages: List<OutgoingMessage>,
+        savedProfileJson: String?,
+        maxEncodedFileChars: Int = DEFAULT_MAX_ENCODED_FILE_CHARS
+    ): String {
+        val window = messages.takeLast(if (savedProfileJson != null) MAX_MESSAGES - 1 else MAX_MESSAGES)
+        val kept = keepNewestFiles(window, maxEncodedFileChars)
+        val body = buildJsonObject {
+            put("messages", buildJsonArray {
+                if (savedProfileJson != null) {
+                    add(buildJsonObject {
+                        put("id", "saved-cv-profile")
+                        put("role", OutgoingRole.ASSISTANT.wireName)
+                        put("content", SAVED_PROFILE_NOTE)
+                        put("candidateProfile", Json.parseToJsonElement(savedProfileJson))
+                    })
+                }
+                kept.forEach { add(messageJson(it)) }
+            })
+        }
+        return body.toString()
+    }
+
+    private fun keepNewestFiles(messages: List<OutgoingMessage>, limit: Int): List<OutgoingMessage> {
+        var total = messages.sumOf { message -> message.files.sumOf { it.dataUrl.length } }
+        return messages.map { message ->
+            if (total > limit && message.files.isNotEmpty()) {
+                total -= message.files.sumOf { it.dataUrl.length }
+                message.copy(files = emptyList())
+            } else message
+        }
+    }
+
+    private fun messageJson(message: OutgoingMessage): JsonObject = buildJsonObject {
+        put("id", message.id)
+        put("role", message.role.wireName)
+        put("content", message.content)
+        if (message.role == OutgoingRole.USER && message.files.isNotEmpty()) {
+            put("files", JsonArray(message.files.map { file ->
+                buildJsonObject {
+                    put("id", file.id)
+                    put("name", file.name)
+                    put("type", file.type)
+                    put("data", JsonPrimitive(file.dataUrl))
+                }
+            }))
+        }
+    }
+}

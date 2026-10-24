@@ -11,7 +11,10 @@ import app.kwela.data.local.KwelaDatabase
 import app.kwela.data.local.SavedDocumentEntity
 import app.kwela.domain.ThemeMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.security.SecureRandom
+import java.util.Base64
 
 private val Context.preferencesDataStore by preferencesDataStore(name = "kwela_preferences")
 
@@ -26,6 +29,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     val signedInEmail: Flow<String?> = appContext.preferencesDataStore.data.map { it[EMAIL_KEY] }
     val pendingSharedText: Flow<String?> = appContext.preferencesDataStore.data.map { it[PENDING_SHARE_KEY] }
     val themeMode: Flow<ThemeMode> = appContext.preferencesDataStore.data.map { ThemeMode.fromStored(it[THEME_KEY]) }
+    val candidateProfile: Flow<String?> = appContext.preferencesDataStore.data.map { it[PROFILE_KEY] }
     val notificationsEnabled: Flow<Boolean> = appContext.preferencesDataStore.data.map { it[NOTIFICATIONS_KEY] ?: true }
 
     suspend fun saveMessage(message: ChatMessageEntity) = dao.saveMessage(message)
@@ -58,6 +62,21 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
         appContext.preferencesDataStore.edit { it[THEME_KEY] = mode.name }
     }
 
+    /** Returns this install's private token, creating it on first use. It identifies the install to the Kwela API. */
+    suspend fun deviceToken(): String {
+        var token = ""
+        appContext.preferencesDataStore.edit { preferences ->
+            token = preferences[TOKEN_KEY] ?: Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(ByteArray(32).also { SecureRandom().nextBytes(it) })
+                .also { preferences[TOKEN_KEY] = it }
+        }
+        return token
+    }
+
+    suspend fun saveCandidateProfile(profileJson: String) {
+        appContext.preferencesDataStore.edit { it[PROFILE_KEY] = profileJson }
+    }
+
     suspend fun clearUserData() {
         dao.clearMessages()
         dao.clearDocuments()
@@ -65,12 +84,15 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
         appContext.preferencesDataStore.edit { preferences ->
             preferences.remove(EMAIL_KEY)
             preferences.remove(PENDING_SHARE_KEY)
+            preferences.remove(PROFILE_KEY)
         }
     }
 
     private companion object {
         val EMAIL_KEY = stringPreferencesKey("signed_in_email")
         val PENDING_SHARE_KEY = stringPreferencesKey("pending_shared_text")
+        val TOKEN_KEY = stringPreferencesKey("device_token")
+        val PROFILE_KEY = stringPreferencesKey("candidate_profile")
         val THEME_KEY = stringPreferencesKey("theme_mode")
         val NOTIFICATIONS_KEY = booleanPreferencesKey("notifications_enabled")
     }
