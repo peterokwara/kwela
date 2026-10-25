@@ -91,14 +91,19 @@ async function runWithRetry(input: AgentInputItem[], runner: AgentRunner, onUsag
  * @param apiKey OpenAI credential configured for this runtime.
  * @returns An assistant implementation that returns streamed replies.
  */
-export function createOpenAICareerAssistantService(apiKey: string, runner: AgentRunner = runCareerAgent): ICareerAssistant {
+export function createOpenAICareerAssistantService(apiKey: string, runner: AgentRunner = runCareerAgent, compact: typeof compactConversationContext = compactConversationContext): ICareerAssistant {
     setDefaultOpenAIKey(apiKey);
     return {
         async respond(messages: readonly IChatMessage[], onUsage?: UsageReporter, context?: IConversationContext | null) {
-            const compactedContext = await compactConversationContext(messages, context ?? null, onUsage);
+            const profileMessage = messages.find((message) => message.id === "saved-cv-profile");
+            const conversationMessages = messages.filter((message) => message.id !== "saved-cv-profile");
+            const compactedContext = await compact(conversationMessages, context ?? null, onUsage);
+            const cursor = compactedContext ? conversationMessages.findIndex((message) => message.id === compactedContext.throughMessageId) : -1;
+            const start = cursor < 0 ? 0 : Math.min(cursor + 1, Math.max(0, conversationMessages.length - 12));
+            const fullMessages = conversationMessages.slice(start);
             const input: AgentInputItem[] = [];
             if (compactedContext?.summary) {
-                const recentMessages = messages.slice(-20);
+                const recentMessages = fullMessages;
                 const recentDraft = [...recentMessages].reverse().some((message) => message.application);
                 input.push(await chatMessageToAgentInput({
                     id: "kwela-compacted-context",
@@ -107,7 +112,8 @@ export function createOpenAICareerAssistantService(apiKey: string, runner: Agent
                     ...(!recentDraft && compactedContext.currentApplication ? { application: compactedContext.currentApplication } : {})
                 }));
             }
-            for (const message of messages.slice(-20)) input.push(await chatMessageToAgentInput(message));
+            if (profileMessage) input.push(await chatMessageToAgentInput(profileMessage));
+            for (const message of fullMessages) input.push(await chatMessageToAgentInput(message));
             const reply = await runWithRetry(input, runner, onUsage);
             const body = new TextEncoder().encode(JSON.stringify({ ...reply, conversationContext: compactedContext }));
             return new ReadableStream<Uint8Array>({

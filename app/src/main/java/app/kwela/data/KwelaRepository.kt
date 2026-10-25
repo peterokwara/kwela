@@ -29,6 +29,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     val themeMode: Flow<ThemeMode> = appContext.preferencesDataStore.data.map { ThemeMode.fromStored(it[THEME_KEY]) }
     /** The last reply failure to show as a Try again card, kept on disk so it never replays by accident. */
     val replyError: Flow<String?> = appContext.preferencesDataStore.data.map { it[REPLY_ERROR_KEY] }
+    val failedReplyMessageId: Flow<String?> = appContext.preferencesDataStore.data.map { it[FAILED_REPLY_MESSAGE_KEY] }
 
     /** A one-time note for the sign-in screen, such as "Please sign in again." */
     val signInNotice: Flow<String?> = appContext.preferencesDataStore.data.map { it[SIGN_IN_NOTICE_KEY] }
@@ -39,6 +40,11 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     val notificationsEnabled: Flow<Boolean> = appContext.preferencesDataStore.data.map { it[NOTIFICATIONS_KEY] ?: true }
 
     suspend fun saveMessage(message: ChatMessageEntity) = dao.saveMessage(message)
+    /** Gives messages a stable order even when a person sends several in quick succession. */
+    suspend fun nextMessageTimestamp(): Long {
+        val latest = messages.first().maxOfOrNull { it.createdAt } ?: 0L
+        return maxOf(System.currentTimeMillis(), latest + MESSAGE_TIME_GAP_MS)
+    }
     suspend fun deleteMessage(id: String) = dao.deleteMessage(id)
     suspend fun saveTask(task: ApplicationTaskEntity) = dao.saveTask(task)
     suspend fun getLatestTask(): ApplicationTaskEntity? = dao.latestTask()
@@ -61,6 +67,10 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
             if (changedAccount) {
                 preferences.remove(PROFILE_KEY)
                 preferences.remove(CONVERSATION_CONTEXT_KEY)
+                preferences.remove(DRAFT_KEY)
+                preferences.remove(REVIEW_KEY)
+                preferences.remove(REPLY_ERROR_KEY)
+                preferences.remove(FAILED_REPLY_MESSAGE_KEY)
             }
             preferences[DATA_OWNER_EMAIL_KEY] = normalizedEmail
             preferences[EMAIL_KEY] = normalizedEmail
@@ -107,6 +117,10 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
         appContext.preferencesDataStore.edit { if (message == null) it.remove(REPLY_ERROR_KEY) else it[REPLY_ERROR_KEY] = message }
     }
 
+    suspend fun setFailedReplyMessageId(messageId: String?) {
+        appContext.preferencesDataStore.edit { if (messageId == null) it.remove(FAILED_REPLY_MESSAGE_KEY) else it[FAILED_REPLY_MESSAGE_KEY] = messageId }
+    }
+
     suspend fun setSignInNotice(message: String?) {
         appContext.preferencesDataStore.edit { if (message == null) it.remove(SIGN_IN_NOTICE_KEY) else it[SIGN_IN_NOTICE_KEY] = message }
     }
@@ -123,10 +137,10 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     }
 
     /** Adds a short bubble written by the app itself. It is shown in the chat but never sent to the writer. Returns its id. */
-    suspend fun sayLocally(text: String, documentId: String? = null): String {
-        val id = app.kwela.domain.LocalMessages.PREFIX + java.util.UUID.randomUUID()
-        dao.saveMessage(ChatMessageEntity(id, "ASSISTANT", text, System.currentTimeMillis(), documentId = documentId))
-        return id
+    suspend fun sayLocally(text: String, documentId: String? = null, id: String? = null, createdAt: Long = System.currentTimeMillis()): String {
+        val messageId = id ?: (app.kwela.domain.LocalMessages.PREFIX + java.util.UUID.randomUUID())
+        dao.saveMessage(ChatMessageEntity(messageId, "ASSISTANT", text, createdAt, documentId = documentId))
+        return messageId
     }
 
     suspend fun saveDraftNow(text: String) = saveDraft(text)
@@ -154,6 +168,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
             preferences.remove(DRAFT_KEY)
             preferences.remove(REVIEW_KEY)
             preferences.remove(REPLY_ERROR_KEY)
+            preferences.remove(FAILED_REPLY_MESSAGE_KEY)
             preferences.remove(ANSWERED_KEY)
             preferences.remove(PROFILE_KEY)
             preferences.remove(CONVERSATION_CONTEXT_KEY)
@@ -169,9 +184,11 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
         val PROFILE_KEY = stringPreferencesKey("candidate_profile")
         val CONVERSATION_CONTEXT_KEY = stringPreferencesKey("conversation_context")
         val REPLY_ERROR_KEY = stringPreferencesKey("reply_error")
+        val FAILED_REPLY_MESSAGE_KEY = stringPreferencesKey("failed_reply_message_id")
         val SIGN_IN_NOTICE_KEY = stringPreferencesKey("sign_in_notice")
         val ANSWERED_KEY = stringPreferencesKey("answered_review_lines")
         const val ANSWERED_SEPARATOR = "\u0001"
+        const val MESSAGE_TIME_GAP_MS = 10L
         val PROMPTED_KEY = booleanPreferencesKey("notification_prompt_shown")
         val REVIEW_KEY = stringPreferencesKey("pending_review")
         val DRAFT_KEY = stringPreferencesKey("draft_text")

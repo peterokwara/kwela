@@ -12,7 +12,7 @@ const maximumRequestLength = 32 * 1024 * 1024;
 /**
  * Maximum conversation messages accepted in one request.
  */
-const maximumMessages = 40;
+const maximumMessages = 400;
 
 type ChatRequestResult = { messages: IChatMessage[]; conversationContext: IConversationContext | null } | { response: Response };
 
@@ -112,7 +112,7 @@ export async function readChatMessages(request: Request): Promise<ChatRequestRes
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !("messages" in parsed)) {
             return { response: badRequest("Send a valid chat message.", 400) };
         }
-        body = parsed as { messages?: unknown };
+        body = parsed as { messages?: unknown; conversationContext?: unknown };
     } catch {
         return { response: badRequest("The chat request was not valid JSON.", 400) };
     }

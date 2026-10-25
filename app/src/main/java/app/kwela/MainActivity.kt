@@ -25,6 +25,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -216,10 +219,12 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
 private fun LoginScreen(email: String, otp: Boolean, testCode: String?, working: Boolean, error: String?, onEmail: (String) -> Unit, request: () -> Unit, verify: (String) -> Unit, back: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     var code by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(horizontal = 28.dp), verticalArrangement = Arrangement.Center) {
+    val focus = LocalFocusManager.current
+    val requestCode = { focus.clearFocus(); request() }
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 24.dp), verticalArrangement = Arrangement.Center) {
         BrandMark()
         Spacer(Modifier.height(24.dp))
-        Text(if (otp) "Check your email" else "Welcome to Kwela", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = colors.onSurface)
+        Text(if (otp && testCode != null) "Your sign-in code" else if (otp) "Check your email" else "Welcome to Kwela", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = colors.onSurface)
         Spacer(Modifier.height(8.dp))
         Text(
             if (otp && testCode != null) "Private test code: $testCode. Enter it to continue."
@@ -229,13 +234,13 @@ private fun LoginScreen(email: String, otp: Boolean, testCode: String?, working:
         )
         Spacer(Modifier.height(28.dp))
         if (!otp) {
-            OutlinedTextField(email, onEmail, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+            OutlinedTextField(email, onEmail, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { requestCode() }))
             Spacer(Modifier.height(16.dp))
-            Button(onClick = request, Modifier.fillMaxWidth().height(52.dp), enabled = !working, shape = CircleShape) { Text(if (working) "Sending code…" else "Continue") }
+            Button(onClick = requestCode, Modifier.fillMaxWidth().height(52.dp), enabled = !working, shape = CircleShape) { Text(if (working) "Sending code…" else "Continue") }
         } else {
-            OutlinedTextField(code, { if (it.length <= 6 && it.all(Char::isDigit)) code = it }, Modifier.fillMaxWidth(), label = { Text("6-digit code") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+            OutlinedTextField(code, { if (it.length <= 6 && it.all(Char::isDigit)) code = it }, Modifier.fillMaxWidth(), label = { Text("6-digit code") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { if (code.length == 6) { focus.clearFocus(); verify(code) } }))
             Spacer(Modifier.height(16.dp))
-            Button(onClick = { verify(code) }, Modifier.fillMaxWidth().height(52.dp), enabled = !working && code.length == 6, shape = CircleShape) { Text(if (working) "Checking…" else "Sign in") }
+            Button(onClick = { focus.clearFocus(); verify(code) }, Modifier.fillMaxWidth().height(52.dp), enabled = !working && code.length == 6, shape = CircleShape) { Text(if (working) "Checking…" else "Sign in") }
             Row {
                 TextButton(onClick = back, enabled = !working) { Text("Use a different email") }
                 TextButton(onClick = request, enabled = !working) { Text("Send a new code") }
@@ -454,7 +459,7 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
                     BasicTextField(draft, setDraft, Modifier.fillMaxWidth().focusRequester(composerFocus), textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface), cursorBrush = SolidColor(colors.primary), maxLines = 5)
                 }
             }
-            if ((draft.isNotBlank() || pendingAttachment != null) && !isReplying) {
+            if (draft.isNotBlank() || pendingAttachment != null) {
                 Spacer(Modifier.width(8.dp))
                 FilledIconButton(onClick = send, Modifier.size(56.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.primaryContainer, contentColor = colors.onPrimaryContainer)) { Icon(Icons.AutoMirrored.Outlined.Send, "Send") }
             }
@@ -669,7 +674,7 @@ private fun SettingsScreen(
         SettingsSection("Privacy and legal", listOfNotNull(
             BuildConfig.PRIVACY_URL.takeIf { it.isNotBlank() }?.let { url -> ListRow("Privacy policy", onClick = { openUrl(context, url) }) },
             BuildConfig.TERMS_URL.takeIf { it.isNotBlank() }?.let { url -> ListRow("Terms of service", onClick = { openUrl(context, url) }) },
-            ListRow("Your data", "Your chats and files are saved on this phone. Messages and files you send are processed by Kwela’s servers and OpenAI to prepare your documents, and are not kept on our servers. Your saved CV profile is kept on our server until you delete your account.")
+            ListRow("Your data", "Your chats and files are saved on this phone. Messages and files you send are processed by Kwela’s servers and OpenAI. Task inputs are kept while work runs, then deleted on success or after 24 hours on failure. Completed replies stay on the server until this phone saves them. Your saved CV profile is kept on our server until you delete your account.")
         ))
         SettingsSection("Support", buildList {
             BuildConfig.SUPPORT_EMAIL.takeIf { it.isNotBlank() }?.let { to ->

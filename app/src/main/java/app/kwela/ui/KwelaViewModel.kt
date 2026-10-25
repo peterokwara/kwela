@@ -66,9 +66,11 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<KwelaUiState> = mutableState.asStateFlow()
     private var taskJob: Job? = null
     private val finishLock = Mutex()
+    private val sendLock = Mutex()
 
     init {
         restoreDraft()
+        observePendingShare()
         observePendingReview()
         observeReplyWork()
         viewModelScope.launch {
@@ -90,7 +92,6 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                     tasks = values[2] as List<ApplicationTaskEntity>,
                     documents = values[3] as List<SavedDocumentEntity>,
                     notificationsEnabled = values[4] as Boolean,
-                    draftText = (values[5] as String?) ?: mutableState.value.draftText,
                     themeMode = values[6] as ThemeMode
                 )
             }.collect { next ->
@@ -181,6 +182,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             }
             taskJob?.cancel()
             taskJob = null
+            val draftBeforeSignIn = mutableState.value.draftText
             val changedAccount = repository.signIn(signedIn.email, signedIn.token)
             mutableState.value = mutableState.value.copy(
                 isSigningIn = false,
@@ -188,14 +190,10 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                 loginTestCode = null,
                 pendingEmail = "",
                 screen = AppScreen.CHAT,
-                draftText = if (changedAccount) "" else mutableState.value.draftText,
+                draftText = if (changedAccount && mutableState.value.draftText == draftBeforeSignIn) "" else mutableState.value.draftText,
                 pendingAttachment = if (changedAccount) null else mutableState.value.pendingAttachment,
                 replyError = null
             )
-            repository.pendingSharedText.first()?.let { shared ->
-                repository.savePendingSharedText(null)
-                setDraft(shared)
-            }
         }
     }
 
@@ -205,7 +203,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         val current = mutableState.value
         val text = current.draftText.trim()
         val attachment = current.pendingAttachment
-        if ((text.isBlank() && attachment == null) || current.isReplying) return
+        if (text.isBlank() && attachment == null) return
         draftSave?.cancel()
         mutableState.value = current.copy(draftText = "", pendingAttachment = null)
         val wanted = if (attachment == null) ShowRequest.parse(text) else null
@@ -213,16 +211,18 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         sendText(text.ifBlank { "Please review my file." }, attachment)
     }
 
-    /** Sends a message to the writer without touching what the person is typing. A newer message replaces a reply still being written. */
+    /** Sends a message to the writer without touching the person's current draft. */
     private fun sendText(text: String, attachment: PendingAttachment? = null) {
         val slow = ReplyPacing.isSlow(text, attachment != null)
-        mutableState.value = mutableState.value.copy(replyError = null, pendingReview = null, downloadGate = null, isReplying = true, replyIsSlow = slow)
+        mutableState.value = mutableState.value.copy(pendingReview = null, downloadGate = null, isReplying = true, replyIsSlow = slow)
         viewModelScope.launch {
-            repository.saveDraftNow(mutableState.value.draftText)
-            repository.savePendingReview(null)
-            repository.setReplyError(null)
-            repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "USER", text, System.currentTimeMillis(), attachment?.name, attachment?.uri))
-            ReplyScheduler.enqueue(getApplication(), slow)
+            sendLock.withLock {
+                repository.saveDraftNow(mutableState.value.draftText)
+                repository.savePendingReview(null)
+                val messageId = UUID.randomUUID().toString()
+                repository.saveMessage(ChatMessageEntity(messageId, "USER", text, repository.nextMessageTimestamp(), attachment?.name, attachment?.uri))
+                ReplyScheduler.enqueue(getApplication(), messageId, slow)
+            }
         }
     }
 
@@ -248,11 +248,13 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     fun retryReply() {
         if (mutableState.value.isReplying) return
         viewModelScope.launch {
-            val last = repository.messages.first().lastOrNull { !LocalMessages.isLocal(it.id) && it.role == "USER" }
-            val slow = last != null && ReplyPacing.isSlow(last.content, last.attachmentUri != null)
-            mutableState.value = mutableState.value.copy(isReplying = true, replyIsSlow = slow, replyError = null)
-            repository.setReplyError(null)
-            ReplyScheduler.enqueue(getApplication(), slow)
+            val failedId = repository.failedReplyMessageId.first()
+            val targetMessage = repository.messages.first().firstOrNull { it.id == failedId }
+                ?: repository.messages.first().lastOrNull { !LocalMessages.isLocal(it.id) && it.role == "USER" }
+            if (targetMessage == null) return@launch
+            val slow = ReplyPacing.isSlow(targetMessage.content, targetMessage.attachmentUri != null)
+            mutableState.value = mutableState.value.copy(isReplying = true, replyIsSlow = slow)
+            ReplyScheduler.enqueue(getApplication(), targetMessage.id, slow, retry = true)
         }
     }
 
@@ -317,12 +319,20 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun acceptSharedText(rawText: String?) {
         val payload = SharedPayloadParser.parse(rawText) ?: return
-        if (mutableState.value.email == null) {
-            viewModelScope.launch { repository.savePendingSharedText(payload.value) }
-            mutableState.value = mutableState.value.copy(screen = AppScreen.CHAT)
-        } else {
-            setDraft(payload.value)
-            setScreen(AppScreen.CHAT)
+        viewModelScope.launch { repository.savePendingSharedText(payload.value) }
+        setScreen(AppScreen.CHAT)
+    }
+
+    private fun observePendingShare() {
+        viewModelScope.launch {
+            combine(repository.signedInEmail, repository.pendingSharedText) { email, shared -> email to shared }
+                .collect { (email, shared) ->
+                    if (email != null && shared != null) {
+                        repository.savePendingSharedText(null)
+                        setDraft(shared)
+                        setScreen(AppScreen.CHAT)
+                    }
+                }
         }
     }
 

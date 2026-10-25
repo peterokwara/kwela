@@ -33,7 +33,7 @@ For this form, transfers to Cloudflare and OpenAI are treated as service-provide
 
 ## Handling notes
 
-- The app stores chats and attachments in its local database. Kwela's Worker processes each chat request without saving chat text or attachment bytes to the Kwela D1 database. OpenAI's API may retain abuse-monitoring logs containing prompts and responses for up to 30 days by default, with exceptions for legal or security needs.
+- The app stores chats and attachments in its local database. Kwela temporarily stores task requests, including chat context and attachments, in R2 until success or until failed inputs expire after 24 hours (cleanup every 15 minutes). Completed replies and generated documents are staged in D1 until the phone saves and acknowledges them, or account deletion. Minimal task records remain until account deletion. Workflow metadata is retained for 26 hours after an attempt finishes. OpenAI's API may retain abuse-monitoring logs containing prompts and responses for up to 30 days by default, with exceptions for legal or security needs.
 - The structured CV profile is stored in D1 until account deletion. Account deletion removes the account, sessions, pending code, and CV profile. Usage records remain under a stable keyed opaque ID derived from the normalized email to enforce the experiment's spending limit, even if someone deletes and recreates an account.
 - The account email and a keyed code hash are stored in D1. Codes expire after 10 minutes and are invalidated on use. Unused expired code rows may remain until replaced or account deletion.
 - Sign-in rate-limit rows contain keyed hashes of email/IP values and counts, not raw values. The current implementation has no automatic cleanup job for those rows.

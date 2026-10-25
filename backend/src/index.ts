@@ -6,6 +6,8 @@ import { createChatPostHandler } from "./lib/server/services/chatPostHandlerServ
 import { D1CandidateProfileStoreService, type CandidateProfileDatabase } from "./lib/server/services/d1CandidateProfileStoreService.ts";
 import { D1UsageLimitService, type UsageDatabase } from "./lib/server/services/d1UsageLimitService.ts";
 import { createOpenAICareerAssistantService } from "./lib/server/services/openAICareerAssistantService.ts";
+import { D1ChatRunService } from "./lib/server/services/d1ChatRunService.ts";
+export { ChatRunWorkflow } from "./lib/server/services/chatRunWorkflow.ts";
 import {
     DEFAULT_MODEL_PRICES,
     DEFAULT_USAGE_LIMITS,
@@ -22,6 +24,10 @@ export interface Env {
      * D1 database for usage limits and saved CV profiles.
      */
     DB: D1Database;
+    /** Short-lived chat inputs used by durable Workflow runs. */
+    RUN_INPUTS: R2Bucket;
+    /** Durable execution for chat and document tasks. */
+    CHAT_RUNS: Workflow<{ runId: string }>;
     /**
      * Cloudflare Browser Run binding used to render PDFs.
      */
@@ -113,6 +119,9 @@ export default {
                 return postChat({ request: chatRequest, ownerId });
             },
             profiles: new D1CandidateProfileStoreService(env.DB as unknown as CandidateProfileDatabase),
+            chatRuns: new D1ChatRunService(env.DB, env.RUN_INPUTS, env.CHAT_RUNS),
+            reserveRender: (ownerId) =>
+                new D1UsageLimitService(env.DB as unknown as UsageDatabase, readUsageConfig(env).limits).reserveRender(ownerId),
             renderPdf: (html) =>
                 env.BROWSER.quickAction("pdf", {
                     html,
@@ -120,5 +129,8 @@ export default {
                 })
         });
         return router(request);
+    },
+    async scheduled(_controller: ScheduledController, env: Env, context: ExecutionContext) {
+        context.waitUntil(new D1ChatRunService(env.DB, env.RUN_INPUTS, env.CHAT_RUNS).cleanupExpiredInputs());
     }
 } satisfies ExportedHandler<Env>;

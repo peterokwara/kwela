@@ -17,13 +17,20 @@ const contextSummaryAgent = new Agent({
     instructions: `Write a compact memory for Kwela's next reply. Keep the active job, the user's goals and preferences, confirmed decisions, unanswered questions, and what should happen next. Keep important facts from attached job files. Keep facts accurate and distinguish confirmed facts from guesses. Drop greetings, repeated details, and completed side topics. The candidate CV profile is stored separately, so do not copy personal contact details or reproduce the full CV. Keep the note under 900 words. Return only the summary field.`
 });
 
+export type ContextSummaryRunner = (input: AgentInputItem[]) => Promise<{ summary: string; usage: { inputTokens: number; outputTokens: number } | null }>;
+const summarizeContext: ContextSummaryRunner = async (input) => {
+    const result = await run(contextSummaryAgent, input, { maxTurns: 1, signal: AbortSignal.timeout(SUMMARY_TIMEOUT_MS) });
+    return { summary: result.finalOutput?.summary ?? "", usage: result.state.usage };
+};
+
 type UsageReporter = (usage: { inputTokens: number; outputTokens: number } | null) => void;
 
 /** Folds older chat turns into a rolling summary while leaving the recent exchange intact. */
 export async function compactConversationContext(
     messages: readonly IChatMessage[],
     current: IConversationContext | null,
-    onUsage?: UsageReporter
+    onUsage?: UsageReporter,
+    summarize: ContextSummaryRunner = summarizeContext
 ): Promise<IConversationContext | null> {
     const eligibleEnd = Math.max(0, messages.length - KEEP_RECENT_MESSAGES);
     if (eligibleEnd === 0) return current;
@@ -46,12 +53,9 @@ export async function compactConversationContext(
 
     try {
         for (const message of compactedMessages) input.push(await chatMessageToAgentInput(message));
-        const result = await run(contextSummaryAgent, input, {
-            maxTurns: 1,
-            signal: AbortSignal.timeout(SUMMARY_TIMEOUT_MS)
-        });
-        onUsage?.(result.state.usage);
-        const summary = result.finalOutput?.summary?.trim();
+        const result = await summarize(input);
+        onUsage?.(result.usage);
+        const summary = result.summary.trim();
         if (!summary) return current;
 
         const latestApplication = [...compactedMessages].reverse().find((message) => message.application)?.application;

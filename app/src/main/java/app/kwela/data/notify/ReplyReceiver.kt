@@ -27,8 +27,9 @@ class ReplyReceiver : BroadcastReceiver() {
                 val app = context.applicationContext as KwelaApplication
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        app.repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "USER", text, System.currentTimeMillis()))
-                        ReplyScheduler.enqueue(context, ReplyPacing.isSlow(text, hasAttachment = false))
+                        val messageId = UUID.randomUUID().toString()
+                        app.repository.saveMessage(ChatMessageEntity(messageId, "USER", text, app.repository.nextMessageTimestamp()))
+                        ReplyScheduler.enqueue(context, messageId, ReplyPacing.isSlow(text, hasAttachment = false))
                         notifications.show(emptyList(), youSaid = text)
                     } finally {
                         pending.finish()

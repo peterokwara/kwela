@@ -1,6 +1,15 @@
 package app.kwela
 
 import android.content.Intent
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.assertTextEquals
+import androidx.work.WorkManager
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
+import app.kwela.data.ReplyWorker
+import kotlinx.coroutines.flow.first
+import java.util.concurrent.TimeUnit
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -25,7 +34,7 @@ class MainActivityFlowTest {
     fun demoOtpUnlocksChatAndBottomNavigationWorks() {
         compose.onNodeWithText("Welcome to Kwela").assertIsDisplayed()
         compose.onNode(hasText("Email address", substring = true)).performTextInput("not-an-email")
-        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Continue").assertIsDisplayed().performClick()
         compose.onNodeWithText("Enter a valid email address.").assertIsDisplayed()
 
         compose.activity.receiveSharedIntent(Intent(Intent.ACTION_SEND).apply {
@@ -61,5 +70,19 @@ class MainActivityFlowTest {
         compose.onNodeWithContentDescription("Close").performClick()
         compose.onNodeWithContentDescription("Chat").performClick()
         compose.onNodeWithText("What’s going on right now?").assertIsDisplayed()
+
+        // A delayed worker keeps Kwela busy without calling the real API.
+        val manager = WorkManager.getInstance(compose.activity)
+        val pending = OneTimeWorkRequestBuilder<ReplyWorker>().setInitialDelay(1, TimeUnit.HOURS).build()
+        manager.enqueueUniqueWork(ReplyWorker.UNIQUE, ExistingWorkPolicy.REPLACE, pending).result.get()
+        compose.waitForIdle()
+        compose.onNode(hasSetTextAction()).performTextClearance()
+        compose.onNode(hasSetTextAction()).performTextInput("Keep working; this is my queued follow-up.")
+        compose.onNodeWithContentDescription("Send").assertIsDisplayed().performClick()
+        compose.waitUntil(5_000) {
+            runBlocking { app.repository.messages.first().any { it.content == "Keep working; this is my queued follow-up." } }
+        }
+        compose.onNode(hasSetTextAction()).assertTextEquals("")
+        manager.cancelUniqueWork(ReplyWorker.UNIQUE).result.get()
     }
 }

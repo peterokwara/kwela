@@ -6,6 +6,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
+import androidx.work.BackoffPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -21,7 +22,9 @@ import kotlinx.coroutines.withContext
 class ReplyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as KwelaApplication
-        val outcome = ReplyEngine(applicationContext, app.repository, app.api).run()
+        val targetMessageId = inputData.getString(KEY_TARGET_MESSAGE_ID) ?: return Result.failure()
+        val outcome = ReplyEngine(applicationContext, app.repository, app.api).run(targetMessageId, inputData.getString(KEY_RETRY_KEY))
+        if (outcome.pending) return Result.retry()
         val notifications = ReplyNotifications(applicationContext)
         val allowed = outcome.replyText != null && NotificationRules.shouldNotify(
             appInForeground = isAppInForeground(),
@@ -42,13 +45,19 @@ class ReplyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         const val TAG_SLOW = "slow"
         const val KEY_ERROR = "error"
         const val KEY_EXPIRED = "expired"
+        const val KEY_TARGET_MESSAGE_ID = "target_message_id"
+        const val KEY_RETRY_KEY = "retry_key"
     }
 }
 
-/** Starts a reply job. A new request replaces any earlier one still waiting. */
+/** Adds one reply job to the ordered WorkManager queue. */
 object ReplyScheduler {
-    fun enqueue(context: Context, slow: Boolean) {
-        val request = OneTimeWorkRequestBuilder<ReplyWorker>().apply { if (slow) addTag(ReplyWorker.TAG_SLOW) }.build()
-        WorkManager.getInstance(context).enqueueUniqueWork(ReplyWorker.UNIQUE, ExistingWorkPolicy.REPLACE, request)
+    fun enqueue(context: Context, targetMessageId: String, slow: Boolean, retry: Boolean = false) {
+        val request = OneTimeWorkRequestBuilder<ReplyWorker>()
+            .setInputData(Data.Builder().putString(ReplyWorker.KEY_TARGET_MESSAGE_ID, targetMessageId).apply { if (retry) putString(ReplyWorker.KEY_RETRY_KEY, java.util.UUID.randomUUID().toString()) }.build())
+            .setBackoffCriteria(BackoffPolicy.LINEAR, 15, java.util.concurrent.TimeUnit.SECONDS)
+            .apply { if (slow) addTag(ReplyWorker.TAG_SLOW) }
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(ReplyWorker.UNIQUE, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 }

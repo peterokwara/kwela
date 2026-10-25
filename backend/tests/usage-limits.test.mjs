@@ -4,7 +4,9 @@ import { createChatPostHandler } from "../src/lib/server/services/chatPostHandle
 import { D1UsageLimitService } from "../src/lib/server/services/d1UsageLimitService.ts";
 import {
     DEFAULT_USAGE_LIMITS,
+    MAX_RENDERS_PER_MINUTE,
     MINIMUM_CHARGE_MICROS,
+    RENDER_CHARGE_MICROS,
     estimateCostMicros,
     evaluateUsage
 } from "../src/lib/server/services/usagePolicy.ts";
@@ -70,11 +72,12 @@ function fakeDatabase() {
                                 return { id };
                             }
                             if (query.includes("WHERE owner_id")) {
-                                const [since, owner] = values;
+                                const [since, , owner] = values;
                                 const mine = rows.filter((row) => row.owner === owner);
                                 return {
                                     spent: mine.reduce((sum, row) => sum + row.cost, 0),
-                                    recent: mine.filter((row) => row.kind === "request" && row.at > since).length
+                                    recent: mine.filter((row) => row.kind === "request" && row.at > since).length,
+                                    renders: mine.filter((row) => row.kind === "render" && row.at > since).length
                                 };
                             }
                             return { spent: rows.reduce((sum, row) => sum + row.cost, 0) };
@@ -164,4 +167,32 @@ test("chat handler refuses to run when the visitor can't be identified", async (
     const response = await createChatPostHandler(assistant, { limiter, prices })({ request: chatRequest() });
     assert.equal(response.status, 503);
     assert.equal(called, false);
+});
+
+test("PDF renders are limited per minute and count towards the spending cap", async () => {
+    const database = fakeDatabase();
+    const service = new D1UsageLimitService(database, DEFAULT_USAGE_LIMITS, () => 1_000_000);
+    for (let index = 0; index < MAX_RENDERS_PER_MINUTE; index += 1) {
+        assert.deepEqual(await service.reserveRender("owner-1"), { allowed: true });
+    }
+    const refused = await service.reserveRender("owner-1");
+    assert.equal(refused.allowed, false);
+    assert.equal(refused.status, 429);
+    assert.equal(database.rows.length, MAX_RENDERS_PER_MINUTE, "a refused render leaves no charge behind");
+    assert.equal(database.rows[0].cost, RENDER_CHARGE_MICROS);
+    assert.deepEqual(await service.reserveRender("owner-2"), { allowed: true });
+});
+
+test("renders do not use up the chat allowance", async () => {
+    const database = fakeDatabase();
+    const service = new D1UsageLimitService(database, DEFAULT_USAGE_LIMITS, () => 1_000_000);
+    for (let index = 0; index < MAX_RENDERS_PER_MINUTE; index += 1) await service.reserveRender("owner-1");
+    assert.deepEqual(await service.reserve("owner-1"), { allowed: true });
+});
+
+test("a visitor who has spent the cap cannot render either", async () => {
+    const database = fakeDatabase();
+    database.rows.push({ id: 99, owner: "owner-1", at: 1, cost: DEFAULT_USAGE_LIMITS.capMicros, kind: "request" });
+    const service = new D1UsageLimitService(database, DEFAULT_USAGE_LIMITS, () => 1_000_000);
+    assert.equal((await service.reserveRender("owner-1")).allowed, false);
 });

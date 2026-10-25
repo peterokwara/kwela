@@ -32,7 +32,7 @@
         <tr>
             <td><strong>Messages you send and files you attach</strong> (CVs, job descriptions, photos)</td>
             <td>To write your replies and documents. They pass through our Cloudflare Worker to OpenAI's API for processing.</td>
-            <td>Your phone and OpenAI's abuse-monitoring logs. Kwela does not save chat text or uploaded file contents in its own database. OpenAI says API abuse-monitoring logs may contain prompts and responses and are kept for up to 30 days by default, with exceptions for legal or security needs. See <a href="https://developers.openai.com/api/docs/guides/your-data" rel="noreferrer">OpenAI's API data controls</a>.</td>
+            <td>Your phone and temporary Cloudflare task storage while Kwela works. Successful task inputs are deleted when the result is ready. Failed inputs expire after 24 hours and are removed by a cleanup that runs every 15 minutes. A compact conversation summary stays on your phone and is sent as part of a task when needed. OpenAI says API abuse-monitoring logs may contain prompts and responses and are kept for up to 30 days by default, with exceptions for legal or security needs. See <a href="https://developers.openai.com/api/docs/guides/your-data" rel="noreferrer">OpenAI's API data controls</a>.</td>
         </tr>
         <tr>
             <td><strong>Your CV profile</strong> (name, contact details, education, work history, skills that Kwela reads from your CV)</td>
@@ -42,7 +42,7 @@
         <tr>
             <td><strong>Documents Kwela writes for you</strong></td>
             <td>So you can read, share and save them.</td>
-            <td>Your phone only.</td>
+            <td>Your phone. A temporary server copy of a completed reply and its documents remains available until the app confirms it saved them. We then delete that server copy. Deleting your account also removes outstanding task inputs and results.</td>
         </tr>
         <tr>
             <td><strong>Usage records</strong> (an internal account ID, the time of each request and its estimated cost)</td>
@@ -86,6 +86,7 @@
     <li>The closed-test code does not expire, but each sign-in challenge can be used once. Real email codes stop working after 10 minutes or after use. Their hashed database records may remain until replaced or account deletion.</li>
     <li>A session stops working after 180 days, or earlier if you sign out or delete your account. Its hashed database record may remain until sign-out or account deletion.</li>
     <li>Your account and CV profile stay until you delete your account.</li>
+    <li>Task inputs are deleted on success. Failed inputs expire after 24 hours, with cleanup every 15 minutes. Completed replies remain available until the app saves and acknowledges them, or you delete your account. Minimal task records stay until account deletion. Cloudflare Workflow execution metadata is retained for 26 hours after an attempt finishes.</li>
     <li>
         Usage records are kept for as long as we need them to enforce limits. They use an internal account ID and stay after you delete your
         account so that deleting and re-creating an account cannot be used to get around those limits.

@@ -23,5 +23,12 @@
             "database_id": "09a40714-224c-4e35-9054-adeac23ec618",
             "migrations_dir": "migrations"
         }
-    ]
+    ],
+    "r2_buckets": [
+        { "binding": "RUN_INPUTS", "bucket_name": "kwela-run-inputs" }
+    ],
+    "workflows": [
+        { "name": "kwela-chat-runs", "binding": "CHAT_RUNS", "class_name": "ChatRunWorkflow", "default_retention": { "success_retention": "26 hours", "error_retention": "26 hours" } }
+    ],
+    "triggers": { "crons": ["*/15 * * * *"] }
 }

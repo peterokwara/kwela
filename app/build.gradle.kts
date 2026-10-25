@@ -32,8 +32,8 @@ android {
         applicationId = "app.kwela"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 6
+        versionName = "1.0.2"
         // Store listing links. Set these in gradle.properties; an empty value hides the matching row in Settings.
         fun link(name: String): String {
             val value = providers.gradleProperty(name).orNull.orEmpty()

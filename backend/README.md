@@ -2,7 +2,7 @@
 
 The Cloudflare Worker behind the Kwela Android app. It is its own project with its own D1 database, secrets and deployment. It shares nothing with any other Worker.
 
-The agent code (career partner, CV extraction, job research, application drafting), spending limits and Careergo document shapes were copied from Chaji and renamed. Kwela chats and their compacted conversation memory live on the phone; the Worker processes the memory for a reply but does not store it.
+The agent code (career partner, CV extraction, job research, application drafting), spending limits and Careergo document shapes were copied from Chaji and renamed. Kwela chats and their compacted conversation memory live on the phone. The Worker uses that memory for a reply but does not store it after the task ends. A durable run keeps its request in R2 while it works, deletes the request on success, and deletes a failed request within 24 hours. The reply stays in D1 until the app confirms it saved the documents or the account is deleted.
 
 ## Routes
 
@@ -14,10 +14,15 @@ People sign in with their email address and a 6-digit code (no passwords). `POST
 | POST | `/auth/request-code` | Takes `{ email }` and emails a 6-digit code (valid 10 minutes, 3 requests per 15 minutes per address and 10 requests per 15 minutes per source IP). |
 | POST | `/auth/verify` | Takes `{ email, code }` (5 tries per code) and returns `{ token, email }`. |
 | POST | `/auth/sign-out` | Revokes the session token. |
-| POST | `/api/chat` | Takes `{ messages, conversationContext? }` and returns the agent's JSON reply, including updated `conversationContext`. The app saves that compact summary on the phone and sends it with later turns. `message` is up to four short bubbles separated by blank lines. `review` holds up to three things the writer wants to check, found by fixed rules (a duty with no result, a line with no numbers). A reply that fails after retries is a real error, never a pretend message. Enforces the spending limits. |
+| POST | `/api/runs` | Takes `{ messages, conversationContext? }` and an `Idempotency-Key` UUID. Returns a durable run ID so the app can poll without resending the request. Duplicate submissions reconnect to the same run. Messages queue in order in Android. |
+| GET | `/api/runs/{id}` | Reads a run's `QUEUED`, `RUNNING`, `COMPLETE`, or `FAILED` state. On completion, includes the JSON reply until Android acknowledges it. |
+| POST | `/api/runs/{id}/acknowledge` | Clears the staged reply after Android saves its documents and conversation summary locally. |
+| POST | `/api/chat` | Synchronous legacy route. The app uses `/api/runs` so agent work survives a closed app and a lost connection. The assistant returns updated `conversationContext`; Android stores it locally and sends it with later turns. The saved CV profile is passed separately from the compaction window. |
 | GET, PUT, DELETE | `/api/candidate-profile` | Reads, saves or removes the owner's saved CV profile. |
 | POST | `/api/documents/pdf` | Renders a CV or cover letter draft (`{ type: "resume" \| "cover_letter", document }`) to PDF with Browser Run. |
-| DELETE | `/api/account` | Removes the account, its sessions, pending codes and saved CV profile. Usage records stay under the keyed opaque identifier, so deleting and re-creating an account cannot reset the spending cap. |
+| DELETE | `/api/account` | Removes the account, its sessions, pending codes, saved CV profile, and active or retained run data. Usage records stay under the keyed opaque identifier, so deleting and re-creating an account cannot reset the spending cap. |
+
+Cloudflare Workflows owns each run after `/api/runs` accepts it. The Workflow retries a failed agent step once, then records an explicit failure. A failed request stays in R2 for 24 hours so an explicit retry can create a new execution attempt under the same idempotent run ID. Workflows keep execution metadata for 26 hours; response content remains only in D1 staging until Android acknowledges it or the account is deleted.
 
 ## Run and check
 
@@ -55,6 +60,7 @@ pnpm run deploy
 
 ```sh
 pnpm exec wrangler d1 create kwela        # once; copy the id into wrangler.jsonc
+pnpm exec wrangler r2 bucket create kwela-run-inputs # once
 pnpm run db:migrate:remote
 pnpm exec wrangler secret put OPENAI_API_KEY
 openssl rand -base64 48 | tr -d '\n' | pnpm exec wrangler secret put AUTH_SECRET

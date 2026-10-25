@@ -61,16 +61,28 @@ class KwelaApi(
 
     suspend fun chat(token: String, requestJson: String): ApiResult = call(token, "POST", "/api/chat", requestJson)
 
+    /** Starts or reconnects to the durable run associated with one user message. */
+    suspend fun startChatRun(token: String, idempotencyKey: String, requestJson: String, retryKey: String? = null): ApiResult =
+        call(token, "POST", "/api/runs", requestJson, idempotencyKey, retryKey)
+
+    /** Reads the durable run without resending its inputs. */
+    suspend fun chatRun(token: String, runId: String): ApiResult = call(token, "GET", "/api/runs/$runId", null)
+
+    /** Clears the temporary backend copy after the reply has been saved on this phone. */
+    suspend fun acknowledgeChatRun(token: String, runId: String): ApiResult = call(token, "POST", "/api/runs/$runId/acknowledge", "{}")
+
     suspend fun saveProfile(token: String, profileJson: String): ApiResult =
         call(token, "PUT", "/api/candidate-profile", """{"profile":$profileJson}""")
 
     suspend fun deleteAccount(token: String): ApiResult = call(token, "DELETE", "/api/account", null)
 
-    private suspend fun call(token: String?, method: String, path: String, jsonBody: String?): ApiResult {
+    private suspend fun call(token: String?, method: String, path: String, jsonBody: String?, idempotencyKey: String? = null, retryKey: String? = null): ApiResult {
         if (!isConfigured) return ApiResult.Failure("Kwela’s assistant isn’t available in this build.")
         val request = Request.Builder()
             .url(baseUrl.trimEnd('/') + path)
             .apply { if (token != null) header("authorization", "Bearer $token") }
+            .apply { if (idempotencyKey != null) header("idempotency-key", idempotencyKey) }
+            .apply { if (retryKey != null) header("retry-key", retryKey) }
             .method(method, jsonBody?.toRequestBody("application/json".toMediaType()))
             .build()
         return try {

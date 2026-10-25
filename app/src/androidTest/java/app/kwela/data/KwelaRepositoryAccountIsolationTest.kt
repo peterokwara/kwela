@@ -40,6 +40,9 @@ class KwelaRepositoryAccountIsolationTest {
             repository.saveTask(ApplicationTaskEntity("a-task", "Private task", "prompt", "COMPLETED", 1L, 2L, 2L))
             repository.saveDocument(SavedDocumentEntity("a-file", "Private CV.pdf", "Private content", 1L))
             repository.saveCandidateProfile("{\"name\":\"Amina\"}")
+            repository.saveDraft("Private application draft")
+            repository.setFailedReplyMessageId("a-message")
+            repository.setReplyError("A private task failed")
             repository.signOut()
 
             assertTrue(repository.signIn("brian@example.test", "token-b"))
@@ -47,6 +50,9 @@ class KwelaRepositoryAccountIsolationTest {
             assertTrue(repository.tasks.first().isEmpty())
             assertTrue(repository.documents.first().isEmpty())
             assertNull(repository.candidateProfile.first())
+            assertEquals("", repository.draft())
+            assertNull(repository.failedReplyMessageId.first())
+            assertNull(repository.replyError.first())
 
             repository.saveMessage(ChatMessageEntity("b-message", "USER", "Brian's message", 3L))
             repository.signOut()

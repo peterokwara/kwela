@@ -22,7 +22,6 @@ data class OutgoingMessage(
 
 /** Builds the JSON body the Kwela API expects for one chat turn. */
 object ChatRequestBuilder {
-    private const val MAX_MESSAGES = 20
     private const val DEFAULT_MAX_ENCODED_FILE_CHARS = 28_000_000
     private const val SAVED_PROFILE_NOTE = "Saved CV profile for this person. Reuse it when preparing job materials."
 
@@ -32,7 +31,8 @@ object ChatRequestBuilder {
         maxEncodedFileChars: Int = DEFAULT_MAX_ENCODED_FILE_CHARS,
         conversationContextJson: String? = null
     ): String {
-        val window = messages.filterNot { LocalMessages.isLocal(it.id) }.takeLast(if (savedProfileJson != null) MAX_MESSAGES - 1 else MAX_MESSAGES)
+        val window = messages.filterNot { LocalMessages.isLocal(it.id) }
+        require(window.size + (if (savedProfileJson != null) 1 else 0) <= ConversationContextPolicy.MAX_MESSAGES) { "Too many unsummarized messages" }
         val kept = keepNewestFiles(window, maxEncodedFileChars)
         val newestDraft = kept.indexOfLast { it.role == OutgoingRole.ASSISTANT && it.applicationJson != null }
         val body = buildJsonObject {

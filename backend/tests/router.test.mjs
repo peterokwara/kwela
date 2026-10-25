@@ -6,7 +6,7 @@ const tokenA = "A".repeat(43);
 const tokenB = "B".repeat(43);
 
 function fakes() {
-    const calls = { chat: [], deletedProfiles: [], deletedAccounts: [], signedOut: [], requested: [], verified: [] };
+    const calls = { chat: [], deletedProfiles: [], deletedAccounts: [], signedOut: [], requested: [], verified: [], renders: [], renderDecision: { allowed: true } };
     const sessions = new Map([
         [tokenA, { accountId: "acct-a", email: "a@example.test" }],
         [tokenB, { accountId: "acct-b", email: "b@example.test" }]
@@ -55,6 +55,10 @@ function fakes() {
                 calls.deletedProfiles.push(ownerId);
                 profiles.delete(ownerId);
             }
+        },
+        async reserveRender(ownerId) {
+            calls.renders.push(ownerId);
+            return calls.renderDecision;
         },
         async renderPdf() {
             return new Response("%PDF-1.7", { headers: { "content-type": "application/pdf" } });
@@ -183,4 +187,30 @@ test("signing out revokes the session", async () => {
     assert.equal(response.status, 200);
     assert.deepEqual(calls.signedOut, [tokenA]);
     assert.equal((await router(request("/api/candidate-profile"))).status, 401);
+});
+
+const goodLetter = { coverLetterTitle: "Letter", fullName: "Amina Wanjiru", jobTitle: "Analyst", email: "a@example.test", phoneNumber: "0700", address: null, companyName: "Example Bank", hiringManagerName: null, linkedin: null, letterContent: "Dear team," };
+
+test("pdf export is stopped before rendering when the account is over its limit", async () => {
+    const { router, calls } = fakes();
+    calls.renderDecision = { allowed: false, status: 429, message: "Slow down a little. Try again in a minute." };
+    const response = await router(request("/api/documents/pdf", { method: "POST", body: { type: "cover_letter", document: goodLetter } }));
+    assert.equal(response.status, 429);
+    assert.match((await response.json()).message, /Slow down/);
+    assert.deepEqual(calls.renders, ["acct-a"]);
+});
+
+test("pdf export refuses an oversized body without asking the renderer", async () => {
+    const { router, calls } = fakes();
+    const huge = { type: "cover_letter", document: { ...goodLetter, letterContent: "x".repeat(300_000) } };
+    const response = await router(request("/api/documents/pdf", { method: "POST", body: huge }));
+    assert.equal(response.status, 413);
+    assert.deepEqual(calls.renders, []);
+});
+
+test("an incomplete draft costs nothing", async () => {
+    const { router, calls } = fakes();
+    const response = await router(request("/api/documents/pdf", { method: "POST", body: { type: "resume", document: {} } }));
+    assert.equal(response.status, 400);
+    assert.deepEqual(calls.renders, []);
 });

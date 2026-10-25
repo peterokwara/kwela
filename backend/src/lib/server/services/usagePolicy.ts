@@ -46,6 +46,10 @@ export interface IUsageSnapshot {
      * Total all visitors have spent, in millionths of a US dollar.
      */
     globalSpentMicros: number;
+    /**
+     * PDFs this visitor rendered in the last minute.
+     */
+    rendersLastMinute?: number;
 }
 
 /**
@@ -57,6 +61,21 @@ export type UsageDecision = { allowed: true } | { allowed: false; status: 429 | 
  * Charge held for every request before its real cost is known, in millionths of a dollar.
  */
 export const MINIMUM_CHARGE_MICROS = 20_000;
+
+/**
+ * Charge for one PDF render, in millionths of a dollar. The renderer is a paid service, so it counts towards the spending cap.
+ */
+export const RENDER_CHARGE_MICROS = 3_000;
+
+/**
+ * Most PDFs one visitor may render in a minute.
+ */
+export const MAX_RENDERS_PER_MINUTE = 6;
+
+/**
+ * Largest PDF request body accepted, in characters. A real CV is a few thousand.
+ */
+export const MAX_PDF_BODY_CHARS = 200_000;
 
 /**
  * Limits used when none are configured: $1 per visitor, $25 overall, 4 requests a minute.

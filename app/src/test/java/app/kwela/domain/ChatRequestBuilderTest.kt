@@ -42,17 +42,17 @@ class ChatRequestBuilderTest {
     }
 
     @Test
-    fun putsTheSavedCvProfileFirstAndKeepsTwentyMessagesInTotal() {
+    fun keepsAllUnsummarizedMessagesAndCarriesTheCvProfileSeparately() {
         val history = (1..30).map { OutgoingMessage("m$it", OutgoingRole.USER, "message $it") }
 
         val sent = messages(ChatRequestBuilder.build(history, savedProfileJson = """{"professionalSummary":"Mine"}"""))
 
-        assertEquals(20, sent.size)
+        assertEquals(31, sent.size)
         val first = sent[0].jsonObject
         assertEquals("assistant", first["role"]!!.jsonPrimitive.content)
         assertEquals("Mine", first["candidateProfile"]!!.jsonObject["professionalSummary"]!!.jsonPrimitive.content)
-        assertEquals("message 12", sent[1].jsonObject["content"]!!.jsonPrimitive.content)
-        assertEquals("message 30", sent[19].jsonObject["content"]!!.jsonPrimitive.content)
+        assertEquals("message 1", sent[1].jsonObject["content"]!!.jsonPrimitive.content)
+        assertEquals("message 30", sent[30].jsonObject["content"]!!.jsonPrimitive.content)
     }
 
     @Test
