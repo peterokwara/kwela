@@ -31,7 +31,7 @@ Release package: `app.kwela`, version name `1.0.2`, version code `6`.
 
 ## Google Play submission
 
-Submitted to the existing Alpha closed-test track on October 25, 2026, at 100% rollout for selected testers. Publishing overview confirms **Changes in review**. Google quick checks are running and will forward the release when successful. Managed publishing is off, so approval permits automatic publication. Version 1.0.1 remains available until then. Only version code 6 is included; superseded draft bundles are excluded. Play estimates a 2.11 MB download and reports no blocking errors.
+Submitted to the existing Alpha closed-test track on October 25, 2026, at 100% rollout for selected testers. Publishing overview confirms **Changes in review**. The quick-check panel cleared, and a fresh page load still confirms **Changes in review**. Managed publishing is off, so approval permits automatic publication. Version 1.0.1 remains available until then. Only version code 6 is included; superseded draft bundles are excluded. Play estimates a 2.11 MB download and reports no blocking errors.
 
 ## Artifacts
 

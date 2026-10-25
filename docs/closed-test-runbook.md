@@ -23,7 +23,7 @@ After the tester's email is on both allowlists:
 
 ## Current state
 
-- Play Console submission: **Kwela closed test 1.0.2**, version code **6**, submitted on October 25, 2026 with a 100% rollout to the existing **Alpha** closed test. Publishing overview shows **Changes in review**; Google quick checks are running before the review proceeds. Managed publishing is off.
+- Play Console submission: **Kwela closed test 1.0.2**, version code **6**, submitted on October 25, 2026 with a 100% rollout to the existing **Alpha** closed test. Publishing overview shows **Changes in review** after the quick-check panel cleared. Managed publishing is off.
 - Currently available test release: **Kwela closed test 1.0.1**. Version 1.0.2 becomes available after Google approves it.
 - Android opt-in link: <https://play.google.com/store/apps/details?id=app.kwela>
 - Selected Play email list: **Kwela early access**, currently containing the owner account and `cliff.gor.dev@gmail.com`.
