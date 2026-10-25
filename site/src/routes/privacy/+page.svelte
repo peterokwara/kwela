@@ -75,6 +75,12 @@
 </ul>
 <p>We may also disclose information if the law requires it.</p>
 
+<h2>Notifications</h2>
+<p>
+    If you allow notifications, Kwela tells you when a reply you asked for is ready while you are away from the app. The notification shows Kwela's message, and you can reply or mark it as read from there.
+    If your phone is locked and you have chosen to hide sensitive notification content, Android shows only "New message from Kwela". You can turn replies off in Settings, or mute Kwela in your phone's notification settings. We never send reminders or marketing.
+</p>
+
 <h2>How long we keep it</h2>
 <ul>
     <li>The closed-test code does not expire, but each sign-in challenge can be used once. Real email codes stop working after 10 minutes or after use. Their hashed database records may remain until replaced or account deletion.</li>

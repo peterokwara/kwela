@@ -8,7 +8,8 @@ test("a reply that leaves out empty fields is accepted and filled with null", ()
         type: "message",
         message: "Send your CV.",
         applicationPack: null,
-        candidateProfile: null
+        candidateProfile: null,
+        review: []
     });
 });
 
@@ -22,4 +23,11 @@ test("explicit nulls pass through unchanged", () => {
 
 test("a reply with an unknown type is still rejected", () => {
     assert.equal(careerReplySchema.safeParse({ type: "nonsense", message: "x" }).success, false);
+});
+
+test("a reply that hands over a CV carries the review findings for it", () => {
+    const resume = { employments: [{ achievements: ["Responsible for cleaning weekly sales reports"] }] };
+    const reply = normalizeCareerReply({ type: "application_pack", message: "Done.", applicationPack: { resume } });
+    assert.equal(reply.review.length, 1);
+    assert.equal(reply.review[0].kind, "duty_phrase");
 });

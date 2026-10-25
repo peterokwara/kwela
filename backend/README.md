@@ -14,7 +14,7 @@ People sign in with their email address and a 6-digit code (no passwords). `POST
 | POST | `/auth/request-code` | Takes `{ email }` and emails a 6-digit code (valid 10 minutes, 3 requests per 15 minutes per address and 10 requests per 15 minutes per source IP). |
 | POST | `/auth/verify` | Takes `{ email, code }` (5 tries per code) and returns `{ token, email }`. |
 | POST | `/auth/sign-out` | Revokes the session token. |
-| POST | `/api/chat` | Takes `{ messages }` and returns the agent's JSON reply: `{ type, message, applicationPack, candidateProfile }`. Enforces the spending limits. |
+| POST | `/api/chat` | Takes `{ messages }` and returns the agent's JSON reply: `{ type, message, applicationPack, candidateProfile, review }`. `message` is up to four short bubbles separated by blank lines. `review` holds up to three things the writer wants to check, found by fixed rules (a duty with no result, a line with no numbers). A reply that fails after retries is a real error, never a pretend message. Enforces the spending limits. |
 | GET, PUT, DELETE | `/api/candidate-profile` | Reads, saves or removes the owner's saved CV profile. |
 | POST | `/api/documents/pdf` | Renders a CV or cover letter draft (`{ type: "resume" \| "cover_letter", document }`) to PDF with Browser Run. |
 | DELETE | `/api/account` | Removes the account, its sessions, pending codes and saved CV profile. Usage records stay under the keyed opaque identifier, so deleting and re-creating an account cannot reset the spending cap. |
@@ -64,3 +64,7 @@ pnpm run deploy
 Spending limits and model prices are the `vars` in `wrangler.jsonc`. Never put the OpenAI key there.
 
 The Android app reads this Worker's address from `kwela.apiUrl` in the root `gradle.properties`.
+
+## Voice checks
+
+`scenarios/` holds real-life conversations (a cook on a shift, a doctor between patients, a bartender in a club, Swahili, Sheng, a correction, a noisy job ad, and the quick-question flow). `node scenarios/run.mjs [name]` runs them against the deployed API with an allow-listed tester address, checks the rules (at most four bubbles, short bubbles, no banned words, a next step each time, the honest one-liner at the first handover), and writes a transcript to `scenarios/out/` (git-ignored) for a person to read.

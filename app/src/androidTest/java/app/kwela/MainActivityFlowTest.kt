@@ -36,9 +36,9 @@ class MainActivityFlowTest {
         val app = compose.activity.application as app.kwela.KwelaApplication
         runBlocking { app.repository.signIn("tester@example.test", "test-session-token") }
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("Your next opportunity starts here.").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("What’s going on right now?").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Your next opportunity starts here.").assertIsDisplayed()
+        compose.onNodeWithText("What’s going on right now?").assertIsDisplayed()
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText("https://example.test/pending-internship").fetchSemanticsNodes().isNotEmpty()
         }
@@ -60,6 +60,6 @@ class MainActivityFlowTest {
         compose.onNodeWithText("Open-source licenses").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Close").performClick()
         compose.onNodeWithContentDescription("Chat").performClick()
-        compose.onNodeWithText("Your next opportunity starts here.").assertIsDisplayed()
+        compose.onNodeWithText("What’s going on right now?").assertIsDisplayed()
     }
 }

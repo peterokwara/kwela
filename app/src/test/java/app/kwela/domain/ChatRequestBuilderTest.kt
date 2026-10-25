@@ -87,4 +87,17 @@ class ChatRequestBuilderTest {
         assertFalse(sent[0].jsonObject.containsKey("application"))
         assertFalse(sent[4].jsonObject.containsKey("application"))
     }
+
+    @Test
+    fun leavesOutTheAppsOwnGotItBubblesSoTheWriterNeverSeesThem() {
+        val history = listOf(
+            OutgoingMessage("1", OutgoingRole.USER, "Here is my CV"),
+            OutgoingMessage("local-ack-1", OutgoingRole.ASSISTANT, "Got it, thank you. Give me about a minute."),
+            OutgoingMessage("2", OutgoingRole.ASSISTANT, "Okay, done 🙂")
+        )
+
+        val sent = messages(ChatRequestBuilder.build(history, null))
+
+        assertEquals(listOf("1", "2"), sent.map { it.jsonObject["id"]!!.jsonPrimitive.content })
+    }
 }

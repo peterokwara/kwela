@@ -11,5 +11,7 @@ data class ChatMessageEntity(
     val createdAt: Long,
     val attachmentName: String? = null,
     val attachmentUri: String? = null,
-    val applicationJson: String? = null
+    val applicationJson: String? = null,
+    /** The group of documents this reply produced, shown as cards under it. */
+    val documentGroupId: String? = null
 )

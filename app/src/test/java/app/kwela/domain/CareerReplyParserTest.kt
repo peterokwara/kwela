@@ -39,13 +39,13 @@ class CareerReplyParserTest {
     }
 
     @Test
-    fun turnsAnApplicationPackIntoThreeNamedDocuments() {
-        val documents = CareerReplyParser.parse(pack)!!.documents
+    fun turnsAnApplicationPackIntoThreeShortlyNamedDocumentsForOneJob() {
+        val reply = CareerReplyParser.parse(pack)!!
+        val documents = reply.documents
 
-        assertEquals(
-            listOf("CV - Data Analyst, Example Bank", "Cover letter - Data Analyst, Example Bank", "Application answers - Data Analyst, Example Bank"),
-            documents.map { it.title }
-        )
+        assertEquals("Data Analyst · Example Bank", reply.groupTitle)
+        assertEquals(listOf("CV", "Cover letter", "Answers"), documents.map { it.title })
+        assertEquals(listOf("resume", "cover_letter", "answers"), documents.map { it.kind })
         assertEquals(
             "Amina Wanjiru\namina@example.test · 0700 000 000 · Nairobi, Kenya\n\n" +
                 "PROFESSIONAL SUMMARY\nCareful analyst.\n\n" +
@@ -59,6 +59,15 @@ class CareerReplyParserTest {
             documents[1].body
         )
         assertEquals("Q: Why us?\nA: I like your work.", documents[2].body)
+    }
+
+    @Test
+    fun theCvAndLetterKeepTheirStructuredSourceForTheProperPdfButTheAnswersDoNot() {
+        val documents = CareerReplyParser.parse(pack)!!.documents
+
+        assertTrue(documents[0].sourceJson!!.contains("\"professionalSummary\":\"Careful analyst.\""))
+        assertTrue(documents[1].sourceJson!!.contains("\"letterContent\""))
+        assertNull(documents[2].sourceJson)
     }
 
     @Test

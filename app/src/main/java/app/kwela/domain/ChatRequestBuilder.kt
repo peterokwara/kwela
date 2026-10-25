@@ -31,7 +31,7 @@ object ChatRequestBuilder {
         savedProfileJson: String?,
         maxEncodedFileChars: Int = DEFAULT_MAX_ENCODED_FILE_CHARS
     ): String {
-        val window = messages.takeLast(if (savedProfileJson != null) MAX_MESSAGES - 1 else MAX_MESSAGES)
+        val window = messages.filterNot { LocalMessages.isLocal(it.id) }.takeLast(if (savedProfileJson != null) MAX_MESSAGES - 1 else MAX_MESSAGES)
         val kept = keepNewestFiles(window, maxEncodedFileChars)
         val newestDraft = kept.indexOfLast { it.role == OutgoingRole.ASSISTANT && it.applicationJson != null }
         val body = buildJsonObject {

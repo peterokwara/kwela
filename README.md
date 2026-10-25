@@ -14,6 +14,8 @@ The app uses package `app.kwela` and supports Android 8.0 (API 26) and later. It
 
 Sign in with your email address: Kwela sends a 6-digit code and there is no password. Chats and files are kept in local Room storage on the phone. Sign out keeps them; **Delete account and data** in Settings removes them and your account on the server.
 
+Kwela texts like a person: short bubbles, a clear next step every time, and a quick tap-answer when she wants to check one line of your CV. When a CV and cover letter are ready they appear as cards in the chat (Open, Download, Share). Open shows a full-page, scrollable review where you can tap any line to ask for a change. Download saves the full-design PDF from the server, or a simple version on the phone when there is no internet. Files are grouped by date and by job. Replies run in the background, so if you leave the app Kwela sends a chat-style notification with Reply and Mark as read.
+
 Chat supports Android Sharesheet text and links and one attached file per message (PDF, Word, text or a photo, up to 5 MB). Kwela replies from the API; when it prepares an application, the CV, cover letter and answers are saved in Files, where you can preview, share a PDF or save a PDF. Debug builds add **Run test task** in Settings for trying the review flow.
 
 Set `kwela.apiUrl` in `gradle.properties` to the deployed Worker address. Without it the assistant is unavailable and the app says so.

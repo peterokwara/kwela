@@ -8,9 +8,21 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 
-data class ReplyDocument(val title: String, val body: String)
+/** One document in a reply. [kind] is "resume", "cover_letter" or "answers". [sourceJson] is the structured draft used to make the good PDF. */
+data class ReplyDocument(val title: String, val body: String, val kind: String = "", val sourceJson: String? = null)
 
-data class CareerReply(val message: String, val documents: List<ReplyDocument>, val candidateProfileJson: String?, val applicationJson: String? = null)
+/** One thing the writer wants to check with the person, found by fixed rules on the server. */
+@kotlinx.serialization.Serializable
+data class ReviewFinding(val kind: String, val line: String, val question: String, val options: List<String>)
+
+data class CareerReply(
+    val message: String,
+    val documents: List<ReplyDocument>,
+    val candidateProfileJson: String?,
+    val applicationJson: String? = null,
+    val groupTitle: String? = null,
+    val review: List<ReviewFinding> = emptyList()
+)
 
 /** Reads the JSON reply from the Kwela API into chat text and readable documents. */
 object CareerReplyParser {
@@ -19,18 +31,27 @@ object CareerReplyParser {
         val message = root.text("message") ?: return null
         val profile = root["candidateProfile"]?.takeIf { it !is JsonNull }?.toString()
         val pack = root["applicationPack"] as? JsonObject
-        return CareerReply(message, if (pack != null) documentsFrom(pack) else emptyList(), profile, pack?.toString())
+        return CareerReply(message, if (pack != null) documentsFrom(pack) else emptyList(), profile, pack?.toString(), pack?.let(::groupTitleFrom), reviewFrom(root))
+    }
+
+    private fun reviewFrom(root: JsonObject): List<ReviewFinding> = root.list("review").mapNotNull { item ->
+        val line = item.text("line")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val question = item.text("question")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        ReviewFinding(item.text("kind").orEmpty(), line, question, item.strings("options"))
+    }
+
+    private fun groupTitleFrom(pack: JsonObject): String {
+        val job = pack.obj("job")
+        return listOf(job?.text("title"), job?.text("company")).filter { !it.isNullOrBlank() }.joinToString(" · ").ifBlank { "Application" }
     }
 
     private fun documentsFrom(pack: JsonObject): List<ReplyDocument> {
-        val job = pack.obj("job")
-        val label = listOf(job?.text("title"), job?.text("company")).filter { !it.isNullOrBlank() }.joinToString(", ").ifBlank { "Application" }
         val documents = mutableListOf<ReplyDocument>()
-        pack.obj("resume")?.let { documents += ReplyDocument("CV - $label", formatResume(it)) }
-        pack.obj("coverLetter")?.let { documents += ReplyDocument("Cover letter - $label", formatCoverLetter(it)) }
+        pack.obj("resume")?.let { documents += ReplyDocument("CV", formatResume(it), "resume", it.toString()) }
+        pack.obj("coverLetter")?.let { documents += ReplyDocument("Cover letter", formatCoverLetter(it), "cover_letter", it.toString()) }
         val answers = (pack["applicationAnswers"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
         if (answers.isNotEmpty()) {
-            documents += ReplyDocument("Application answers - $label", answers.joinToString("\n\n") { "Q: ${it.text("question").orEmpty()}\nA: ${it.text("answer").orEmpty()}" })
+            documents += ReplyDocument("Answers", answers.joinToString("\n\n") { "Q: ${it.text("question").orEmpty()}\nA: ${it.text("answer").orEmpty()}" }, "answers")
         }
         return documents
     }

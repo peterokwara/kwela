@@ -54,6 +54,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.clip
@@ -88,7 +93,24 @@ import app.kwela.data.local.ChatMessageEntity
 import app.kwela.data.local.SavedDocumentEntity
 import app.kwela.ui.AppScreen
 import app.kwela.ui.KwelaViewModel
-import app.kwela.ui.chatSuggestions
+import app.kwela.ui.startingMoments
+import app.kwela.ui.ArtifactCard
+import app.kwela.ui.DocumentActions
+import app.kwela.ui.DocumentPreviewScreen
+import app.kwela.ui.FilesScreen
+import app.kwela.ui.rememberDocumentActions
+import app.kwela.domain.ChangeRequest
+import app.kwela.domain.ContactGaps
+import app.kwela.domain.ReviewFinding
+import app.kwela.ui.DownloadGate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import app.kwela.domain.BubbleSplitter
+import app.kwela.domain.ConversationResume
+import app.kwela.domain.LocalMessages
 import app.kwela.ui.theme.KwelaTheme
 import java.io.OutputStream
 import java.io.File
@@ -155,12 +177,33 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                     var profileTab by rememberSaveable { mutableStateOf(ProfileTab.ACTIVITY) }
                     val reviewCount = state.tasks.count { it.taskStatus() == TaskStatus.WAITING_FOR_USER }
                     val openProfile = { profileTab = ProfileTab.ACTIVITY; vm.setScreen(AppScreen.PROFILE) }
-                    if (state.screen == AppScreen.PROFILE) {
+                    var previewId by rememberSaveable { mutableStateOf<String?>(null) }
+                    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+                    // Ask once, at the moment it makes sense: the first time Kwela needs a minute and the person might wander off.
+                    LaunchedEffect(state.isReplying, state.replyIsSlow) {
+                        if (state.isReplying && state.replyIsSlow && state.notificationsEnabled && Build.VERSION.SDK_INT >= 33 &&
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && vm.claimNotificationPrompt()
+                        ) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    val baseActions = rememberDocumentActions { previewId = it.id }
+                    // Before a CV goes out with details missing, Kwela asks in the chat, like a friend would.
+                    fun checked(share: Boolean, action: (SavedDocumentEntity) -> Unit): (SavedDocumentEntity) -> Unit = { document ->
+                        val gaps = if (document.kind == "resume") ContactGaps.of(document.sourceJson) else emptyList()
+                        if (gaps.isNotEmpty() && !vm.checkSkipped(document.id)) { previewId = null; vm.askBeforeDownload(document.id, gaps, share) } else action(document)
+                    }
+                    val docActions = DocumentActions(baseActions.open, checked(false, baseActions.download), checked(true, baseActions.share), baseActions.busyDocumentId)
+                    val previewDocument = state.documents.firstOrNull { it.id == previewId }
+                    LaunchedEffect(state.downloadNowId) {
+                        state.downloadNowId?.let { id -> state.documents.firstOrNull { it.id == id }?.let(if (state.downloadNowShare) baseActions.share else baseActions.download); vm.downloadHandled() }
+                    }
+                    if (previewDocument != null) {
+                        DocumentPreviewScreen(previewDocument, docActions, changeRequest = { line, note -> previewId = null; vm.sendChangeRequest(previewDocument.title, line, note) }) { previewId = null }
+                    } else if (state.screen == AppScreen.PROFILE) {
                         ProfileScreen(state, profileTab, { profileTab = it }, { vm.setScreen(AppScreen.CHAT) }, vm::review, vm::setNotificationsEnabled, vm::setThemeMode, vm::signOut, vm::deleteAccount, vm::startTestTask)
                     } else MainShell(state.screen, vm::setScreen, reviewCount, openProfile) {
                         when (state.screen) {
-                            AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile, state.pendingAttachment, state.isReplying, state.replyError, vm::removeAttachment, vm::retryReply)
-                            AppScreen.FILES -> FilesScreen(state.documents)
+                            AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile, state.pendingAttachment, state.isReplying, state.replyIsSlow, state.replyError, vm::removeAttachment, vm::retryReply, state.documents, docActions, state.pendingReview, state.downloadGate, vm::answerReview, vm::addMissingDetails, vm::downloadAnyway)
+                            AppScreen.FILES -> FilesScreen(state.documents, docActions)
                         }
                     }
                 }
@@ -181,7 +224,7 @@ private fun LoginScreen(email: String, otp: Boolean, testCode: String?, working:
         Text(
             if (otp && testCode != null) "Private test code: $testCode. Enter it to continue."
             else if (otp) "We sent a 6-digit code to $email. Enter it to continue."
-            else "A little help with your next application.",
+            else "Saw a job tonight? Be ready to apply in minutes. No blank page, no cyber café queue.",
             color = colors.onSurfaceVariant
         )
         Spacer(Modifier.height(28.dp))
@@ -361,11 +404,13 @@ private fun ReviewList(tasks: List<ApplicationTaskEntity>, waiting: List<Applica
 }
 
 @Composable
-private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<ApplicationTaskEntity>, draft: String, setDraft: (String) -> Unit, send: () -> Unit, suggestion: (String) -> Unit, cancelTask: (ApplicationTaskEntity) -> Unit, attach: (String) -> Unit, pendingAttachment: PendingAttachment?, isReplying: Boolean, replyError: String?, removeAttachment: () -> Unit, retry: () -> Unit) {
+private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<ApplicationTaskEntity>, draft: String, setDraft: (String) -> Unit, send: () -> Unit, suggestion: (String) -> Unit, cancelTask: (ApplicationTaskEntity) -> Unit, attach: (String) -> Unit, pendingAttachment: PendingAttachment?, isReplying: Boolean, slowWait: Boolean, replyError: String?, removeAttachment: () -> Unit, retry: () -> Unit, documents: List<SavedDocumentEntity>, docActions: DocumentActions, pendingReview: ReviewFinding?, downloadGate: DownloadGate?, answerReview: (String) -> Unit, addMissing: () -> Unit, downloadAnyway: () -> Unit) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val now = remember { System.currentTimeMillis() }
     val listState = rememberLazyListState()
+    val composerFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(messages.size, isReplying, replyError) { if (messages.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -375,13 +420,12 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
     }
     Column(Modifier.fillMaxSize()) {
         if (messages.isEmpty()) {
-            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    Text("Your next opportunity starts here.", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = colors.onSurface)
-                    Spacer(Modifier.height(8.dp)); Text("A thoughtful assistant for your job search. Start with one small step.", color = colors.onSurfaceVariant)
-                    Spacer(Modifier.height(20.dp)); Text("What would you like help with?", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
-                }
-                items(chatSuggestions) { item -> SuggestionCard(item.label) { suggestion(item.prompt) } }
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                item { KwelaBubble("Hi, I’m Kwela 👋") }
+                item { KwelaBubble("I turn your CV and the job you want into an application you’re proud to send.") }
+                item { KwelaBubble("What’s going on right now?") }
+                items(startingMoments) { moment -> MomentChip(moment) { suggestion(moment) } }
+                item { Spacer(Modifier.height(4.dp)); KwelaBubble("Or skip this and send me your CV (a photo works) and the job. I’ll take it from there.") }
             }
         } else {
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -390,11 +434,13 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
                         if (ChatTimeHeader.shouldShow(messages.getOrNull(index - 1)?.createdAt, message.createdAt)) {
                             Text(ChatTimeHeader.label(message.createdAt, now), Modifier.fillMaxWidth().padding(vertical = 8.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                         }
-                        MessageBubble(message)
+                        MessageBubble(message, documents, docActions)
                     }
                 }
                 items(tasks.filter { it.status == "RUNNING" || it.status == "QUEUED" }) { task -> TaskCard(task, { cancelTask(task) }) }
-                if (isReplying) item { WorkingBubble() }
+                if (isReplying && !slowWait) item { TypingDots() }
+                item { ChatChips(messages, isReplying, pendingReview, downloadGate, answerReview, addMissing, downloadAnyway, onRevision = { chip -> if (chip == "Something else") { composerFocus.requestFocus(); keyboard?.show() } else suggestion(chip) }) }
+                if (ConversationResume.needsPickUp(LocalMessages.lastRealRole(messages.map { it.id to it.role }), isReplying, replyError != null)) item { PickUpCard(retry) }
                 if (replyError != null) item { ReplyErrorCard(replyError, retry) }
             }
         }
@@ -404,7 +450,7 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
                 IconButton(onClick = { picker.launch(arrayOf("application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "image/*")) }) { Icon(Icons.Outlined.AddCircleOutline, "Attach a CV", tint = colors.onSurfaceVariant) }
                 Box(Modifier.weight(1f).padding(end = 16.dp, top = 8.dp, bottom = 8.dp)) {
                     if (draft.isEmpty()) Text("Message Kwela", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
-                    BasicTextField(draft, setDraft, Modifier.fillMaxWidth(), textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface), cursorBrush = SolidColor(colors.primary), maxLines = 5)
+                    BasicTextField(draft, setDraft, Modifier.fillMaxWidth().focusRequester(composerFocus), textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface), cursorBrush = SolidColor(colors.primary), maxLines = 5)
                 }
             }
             if ((draft.isNotBlank() || pendingAttachment != null) && !isReplying) {
@@ -415,15 +461,60 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
     }
 }
 
+/** The tap answers that belong under the latest message: the missing-details check, the writer's quick question, or ways to change a finished document. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun WorkingBubble() {
-    val colors = MaterialTheme.colorScheme
-    Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceContainer, modifier = Modifier.padding(end = 56.dp)) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            Spacer(Modifier.width(12.dp))
-            Text("Kwela is working on it…", color = colors.onSurfaceVariant)
+private fun ChatChips(
+    messages: List<ChatMessageEntity>, isReplying: Boolean, pendingReview: ReviewFinding?, gate: DownloadGate?,
+    answerReview: (String) -> Unit, addMissing: () -> Unit, downloadAnyway: () -> Unit, onRevision: (String) -> Unit
+) {
+    if (isReplying) return
+    val newest = messages.lastOrNull { !LocalMessages.isLocal(it.id) }
+    val chips: List<Pair<String, () -> Unit>> = when {
+        gate != null -> listOf("Add it" to addMissing, "Download anyway" to downloadAnyway)
+        pendingReview != null -> pendingReview.options.map { option -> option to { answerReview(option) } }
+        newest?.role == "ASSISTANT" && newest.documentGroupId != null -> ChangeRequest.chips.map { chip -> chip to { onRevision(chip) } }
+        else -> emptyList()
+    }
+    if (chips.isEmpty()) return
+    FlowRow(Modifier.fillMaxWidth().padding(start = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        chips.forEach { (label, onTap) ->
+            Surface(onClick = onTap, shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
+                Text(label, Modifier.padding(horizontal = 16.dp, vertical = 12.dp), style = MaterialTheme.typography.labelLarge)
+            }
         }
+    }
+}
+
+@Composable
+private fun TypingDots() {
+    val colors = MaterialTheme.colorScheme
+    val phase by rememberInfiniteTransition(label = "typing").animateFloat(0f, 3f, infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "dots")
+    Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceContainer, modifier = Modifier.padding(end = 56.dp).semantics { contentDescription = "Kwela is typing" }) {
+        Row(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            repeat(3) { index ->
+                val on = phase.toInt() == index
+                Box(Modifier.size(8.dp).background(colors.onSurfaceVariant.copy(alpha = if (on) 0.9f else 0.35f), CircleShape))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PickUpCard(retry: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Pick up where you left off", Modifier.weight(1f), color = colors.onSurface)
+            TextButton(onClick = retry) { Text("Continue") }
+        }
+    }
+}
+
+@Composable
+private fun KwelaBubble(text: String) {
+    Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.padding(end = 56.dp)) {
+        Text(text, Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -450,27 +541,36 @@ private fun AttachmentChip(name: String, remove: () -> Unit) {
 }
 
 @Composable
-private fun SuggestionCard(label: String, onClick: () -> Unit) {
-    Surface(onClick = onClick, Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
-        Text(label, Modifier.padding(horizontal = 16.dp, vertical = 16.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+private fun MomentChip(label: String, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(onClick = onClick, Modifier.fillMaxWidth().padding(start = 24.dp), shape = RoundedCornerShape(24.dp), color = colors.primaryContainer, contentColor = colors.onPrimaryContainer) {
+        Text(label, Modifier.padding(horizontal = 18.dp, vertical = 16.dp), style = MaterialTheme.typography.bodyLarge)
     }
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessageEntity) {
+private fun MessageBubble(message: ChatMessageEntity, documents: List<SavedDocumentEntity>, docActions: DocumentActions) {
     val user = message.role == "USER"
     val colors = MaterialTheme.colorScheme
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        Surface(
-            color = if (user) colors.primaryContainer else colors.surfaceContainer,
-            contentColor = if (user) colors.onPrimaryContainer else colors.onSurface,
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier.widthIn(max = maxWidth * 0.8f).align(if (user) Alignment.CenterEnd else Alignment.CenterStart)
-        ) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Text(message.content)
-                message.attachmentName?.let { Text("📎 $it", color = colors.onSurfaceVariant, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp)) }
+    val bubbles = if (user) listOf(message.content) else BubbleSplitter.split(message.content).ifEmpty { listOf(message.content) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        bubbles.forEachIndexed { index, text ->
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                Surface(
+                    color = if (user) colors.primaryContainer else colors.surfaceContainer,
+                    contentColor = if (user) colors.onPrimaryContainer else colors.onSurface,
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier.widthIn(max = maxWidth * 0.8f).align(if (user) Alignment.CenterEnd else Alignment.CenterStart)
+                ) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        Text(text)
+                        if (index == bubbles.lastIndex) message.attachmentName?.let { Text("📎 $it", color = colors.onSurfaceVariant, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp)) }
+                    }
+                }
             }
+        }
+        message.documentGroupId?.let { group ->
+            documents.filter { it.groupId == group }.sortedBy { it.createdAt }.forEach { ArtifactCard(it, docActions) }
         }
     }
 }
@@ -509,83 +609,6 @@ private fun GroupedList(rows: List<ListRow>, modifier: Modifier = Modifier) {
             else Surface(shape = shape, color = colors.surfaceContainer, content = body)
         }
     }
-}
-
-@Composable
-private fun FilesScreen(documents: List<SavedDocumentEntity>) {
-    var selected by remember { mutableStateOf<SavedDocumentEntity?>(null) }
-    val context = LocalContext.current
-    val colors = MaterialTheme.colorScheme
-    var exportDocument by remember { mutableStateOf<SavedDocumentEntity?>(null) }
-    val savePdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
-        val doc = exportDocument
-        if (uri != null && doc != null) runCatching { context.contentResolver.openOutputStream(uri)?.use { writePdf(it, doc) } }
-        exportDocument = null
-    }
-    if (documents.isEmpty()) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-            Spacer(Modifier.height(42.dp)); Text("Your files will appear here", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
-            Spacer(Modifier.height(8.dp)); Text("CVs and letters Kwela creates for you are saved here.", color = colors.onSurfaceVariant)
-        }
-    } else {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
-            item {
-                GroupedList(documents.map { doc ->
-                    ListRow(doc.title, "Tap to preview", onClick = { selected = doc }, trailing = {
-                        IconButton(onClick = { sharePdf(context, doc) }) { Icon(Icons.Outlined.Share, "Share PDF", tint = colors.onSurfaceVariant) }
-                        IconButton(onClick = { exportDocument = doc; savePdf.launch(doc.title.substringBeforeLast('.') + ".pdf") }) { Icon(Icons.Outlined.Download, "Save PDF", tint = colors.onSurfaceVariant) }
-                    })
-                })
-            }
-        }
-    }
-    selected?.let { doc -> AlertDialog(onDismissRequest = { selected = null }, title = { Text(doc.title) }, text = { Text(doc.body) }, confirmButton = { TextButton(onClick = { sharePdf(context, doc) }) { Text("Share PDF") } }, dismissButton = { TextButton(onClick = { selected = null }) { Text("Close") } }) }
-}
-
-
-private fun sharePdf(context: android.content.Context, doc: SavedDocumentEntity) {
-    val directory = File(context.cacheDir, "documents").apply { mkdirs() }
-    val file = File(directory, "${doc.id}.pdf")
-    FileOutputStream(file).use { writePdf(it, doc) }
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "application/pdf"
-        putExtra(Intent.EXTRA_SUBJECT, doc.title)
-        putExtra(Intent.EXTRA_STREAM, uri)
-        clipData = android.content.ClipData.newUri(context.contentResolver, doc.title, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(Intent.createChooser(intent, "Share ${doc.title}"))
-}
-
-private fun writePdf(output: OutputStream, doc: SavedDocumentEntity) {
-    val pdf = PdfDocument()
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12f; color = android.graphics.Color.rgb(28, 39, 51) }
-    val heading = Paint(paint).apply { textSize = 18f; typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD) }
-    val width = 595
-    val height = 842
-    val margin = 48f
-    var pageNumber = 1
-    var page = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, pageNumber).create())
-    var canvas = page.canvas
-    var y = margin
-    doc.body.lines().forEachIndexed { index, line ->
-        val chosenPaint = if (index == 0) heading else paint
-        val chunks = if (line.isEmpty()) listOf("") else line.chunked(70)
-        chunks.forEach { chunk ->
-            if (y > height - margin) {
-                pdf.finishPage(page)
-                page = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, ++pageNumber).create())
-                canvas = page.canvas
-                y = margin
-            }
-            canvas.drawText(chunk, margin, y, chosenPaint)
-            y += if (index == 0) 30f else 19f
-        }
-    }
-    pdf.finishPage(page)
-    pdf.writeTo(output)
-    pdf.close()
 }
 
 @Composable
@@ -636,7 +659,7 @@ private fun SettingsScreen(
             ListRow("Delete account and data", "Removes your chats, files and sign-in details from this phone.", destructive = true, onClick = { confirmDelete = true })
         ))
         SettingsSection("Notifications", listOf(
-            ListRow("Task updates", "Tell me when Kwela finishes something", onClick = { setNotifications(!notifications) }, trailing = { Switch(notifications, setNotifications) }),
+            ListRow("Replies", "Tell me when Kwela answers while I’m away", onClick = { setNotifications(!notifications) }, trailing = { Switch(notifications, setNotifications) }),
             ListRow("System notification settings", onClick = { openNotificationSettings(context) })
         ))
         SettingsSection("Appearance", listOf(ListRow("Theme", themeMode.label, onClick = { pickTheme = true })))

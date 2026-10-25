@@ -58,7 +58,7 @@ export function createChatPostHandler(assistant: ICareerAssistant, usage?: IChat
         } catch (cause) {
             console.error("Kwela assistant request failed:", cause);
             return Response.json(
-                { message: "Kwela could not finish this reply. Please try again." },
+                { message: "Couldn’t finish that one. Tap Try again." },
                 { status: 500 }
             );
         } finally {

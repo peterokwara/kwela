@@ -43,6 +43,20 @@ class KwelaApi(
     suspend fun verifyCode(email: String, code: String): ApiResult =
         call(null, "POST", "/auth/verify", buildJsonObject { put("email", email); put("code", code) }.toString())
 
+    /** Asks the server for the full-design PDF of a CV or cover letter. Returns null when it can't be made. */
+    suspend fun renderPdf(token: String, type: String, documentJson: String): ByteArray? {
+        if (!isConfigured) return null
+        val body = """{"type":"$type","document":$documentJson}""".toRequestBody("application/json".toMediaType())
+        val request = Request.Builder().url(baseUrl.trimEnd('/') + "/api/documents/pdf").header("authorization", "Bearer $token").post(body).build()
+        return try {
+            client.newBuilder().callTimeout(30, TimeUnit.SECONDS).build().newCall(request).await().use { response ->
+                if (response.isSuccessful && response.header("content-type")?.startsWith("application/pdf") == true) withContext(Dispatchers.IO) { response.body?.bytes() } else null
+            }
+        } catch (_: IOException) {
+            null
+        }
+    }
+
     suspend fun signOut(token: String): ApiResult = call(token, "POST", "/auth/sign-out", "{}")
 
     suspend fun chat(token: String, requestJson: String): ApiResult = call(token, "POST", "/api/chat", requestJson)

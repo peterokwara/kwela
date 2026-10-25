@@ -10,10 +10,22 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.kwela.KwelaApplication
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import app.kwela.data.AttachmentReader
+import app.kwela.data.ReplyScheduler
+import app.kwela.data.ReplyWorker
 import app.kwela.data.remote.ApiResult
 import app.kwela.domain.AttachmentPolicy
 import app.kwela.domain.CareerReplyParser
+import app.kwela.domain.ChangeRequest
+import app.kwela.domain.ContactGaps
+import app.kwela.domain.ReviewFinding
+import app.kwela.domain.ReviewPrompts
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import app.kwela.domain.LocalMessages
+import app.kwela.domain.ReplyPacing
 import app.kwela.domain.SignInReplyParser
 import app.kwela.domain.SignInCodeRequestParser
 import app.kwela.domain.ChatRequestBuilder
@@ -55,6 +67,9 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     private val finishLock = Mutex()
 
     init {
+        restoreDraft()
+        observePendingReview()
+        observeReplyWork()
         viewModelScope.launch {
             combine(
                 repository.signedInEmail,
@@ -84,8 +99,49 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Mirrors the background reply job, so the chat knows whether the writer is working. The error and sign-in note come from storage. */
+    private fun observeReplyWork() {
+        viewModelScope.launch {
+            WorkManager.getInstance(getApplication<Application>()).getWorkInfosForUniqueWorkFlow(ReplyWorker.UNIQUE).collect { infos ->
+                val info = infos.firstOrNull { !it.state.isFinished }
+                mutableState.value = mutableState.value.copy(isReplying = info != null, replyIsSlow = info != null && ReplyWorker.TAG_SLOW in info.tags)
+            }
+        }
+        viewModelScope.launch { repository.replyError.collect { error -> mutableState.value = mutableState.value.copy(replyError = error) } }
+        viewModelScope.launch {
+            repository.signInNotice.collect { notice ->
+                if (notice != null) {
+                    mutableState.value = mutableState.value.copy(message = notice)
+                    repository.setSignInNotice(null)
+                }
+            }
+        }
+    }
+
+    /** The writer's quick question is kept on disk, so it is still there when the person comes back. */
+    private fun observePendingReview() {
+        viewModelScope.launch {
+            repository.pendingReviewJson.collect { json ->
+                mutableState.value = mutableState.value.copy(pendingReview = json?.let { runCatching { Json.decodeFromString<ReviewFinding>(it) }.getOrNull() })
+            }
+        }
+    }
+
+    private fun restoreDraft() {
+        viewModelScope.launch {
+            val saved = repository.draft()
+            if (saved.isNotEmpty() && mutableState.value.draftText.isEmpty()) mutableState.value = mutableState.value.copy(draftText = saved)
+        }
+    }
+
     fun setScreen(screen: AppScreen) { mutableState.value = mutableState.value.copy(screen = screen) }
-    fun setDraft(text: String) { mutableState.value = mutableState.value.copy(draftText = text) }
+    private var draftSave: Job? = null
+
+    fun setDraft(text: String) {
+        mutableState.value = mutableState.value.copy(draftText = text)
+        draftSave?.cancel()
+        draftSave = viewModelScope.launch { delay(400); repository.saveDraft(text) }
+    }
     fun setPendingEmail(email: String) { mutableState.value = mutableState.value.copy(pendingEmail = email, loginError = null, loginTestCode = null) }
 
     fun requestOtp() {
@@ -149,70 +205,82 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         val text = current.draftText.trim()
         val attachment = current.pendingAttachment
         if ((text.isBlank() && attachment == null) || current.isReplying) return
-        mutableState.value = current.copy(draftText = "", pendingAttachment = null, replyError = null)
+        draftSave?.cancel()
+        mutableState.value = current.copy(draftText = "", pendingAttachment = null)
+        sendText(text.ifBlank { "Please review my file." }, attachment)
+    }
+
+    /** Sends a message to the writer without touching what the person is typing. A newer message replaces a reply still being written. */
+    private fun sendText(text: String, attachment: PendingAttachment? = null) {
+        val slow = ReplyPacing.isSlow(text, attachment != null)
+        mutableState.value = mutableState.value.copy(replyError = null, pendingReview = null, downloadGate = null, isReplying = true, replyIsSlow = slow)
         viewModelScope.launch {
-            repository.saveMessage(
-                ChatMessageEntity(UUID.randomUUID().toString(), "USER", text.ifBlank { "Please review my file." }, System.currentTimeMillis(), attachment?.name, attachment?.uri)
-            )
-            requestReply()
+            repository.saveDraftNow(mutableState.value.draftText)
+            repository.savePendingReview(null)
+            repository.setReplyError(null)
+            repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "USER", text, System.currentTimeMillis(), attachment?.name, attachment?.uri))
+            ReplyScheduler.enqueue(getApplication(), slow)
         }
     }
 
     fun retryReply() {
         if (mutableState.value.isReplying) return
-        viewModelScope.launch { requestReply() }
+        viewModelScope.launch {
+            val last = repository.messages.first().lastOrNull { !LocalMessages.isLocal(it.id) && it.role == "USER" }
+            val slow = last != null && ReplyPacing.isSlow(last.content, last.attachmentUri != null)
+            mutableState.value = mutableState.value.copy(isReplying = true, replyIsSlow = slow, replyError = null)
+            repository.setReplyError(null)
+            ReplyScheduler.enqueue(getApplication(), slow)
+        }
     }
 
     fun removeAttachment() { mutableState.value = mutableState.value.copy(pendingAttachment = null) }
 
+    suspend fun claimNotificationPrompt(): Boolean = repository.claimNotificationPrompt()
+
     fun messageShown() { mutableState.value = mutableState.value.copy(message = null) }
 
-    private suspend fun requestReply() {
-        mutableState.value = mutableState.value.copy(isReplying = true, replyError = null)
-        val failure = runCatching { fetchReply() }.getOrElse { if (it is CancellationException) throw it else "Something went wrong. Please try again." }
-        mutableState.value = mutableState.value.copy(isReplying = false, replyError = failure)
+    fun sendSuggestion(prompt: String) = sendText(prompt)
+
+    /** The person tapped one of the quick answers under the writer's question. */
+    fun answerReview(option: String) {
+        val finding = mutableState.value.pendingReview ?: return
+        viewModelScope.launch { repository.addAnsweredReviewLine(finding.line) }
+        sendText(ReviewPrompts.answer(finding, option))
     }
 
-    /** Sends the conversation to the Kwela API and saves the reply. Returns an error message, or null on success. */
-    private suspend fun fetchReply(): String? {
-        val reader = AttachmentReader(getApplication())
-        val recent = repository.messages.first().takeLast(20)
-        val newestUserId = recent.lastOrNull { it.role == "USER" }?.id
-        val history = withContext(Dispatchers.IO) {
-            recent.map { message ->
-                // Only the newest message carries its file. Earlier files are already summarised in the saved CV profile.
-                val uri = message.attachmentUri.takeIf { message.id == newestUserId }
-                val file = uri?.let { reader.read(message.id, Uri.parse(it)) }
-                if (uri != null && file == null) return@withContext null
-                OutgoingMessage(message.id, if (message.role == "USER") OutgoingRole.USER else OutgoingRole.ASSISTANT, message.content, listOfNotNull(file), message.applicationJson)
-            }
-        } ?: return "Kwela couldn’t read your attached file. Attach it again."
-        val token = repository.sessionToken() ?: return expireSession()
-        val body = ChatRequestBuilder.build(history, repository.candidateProfile.first())
-        val result = api.chat(token, body)
-        if (result is ApiResult.Failure) return if (result.status == 401) expireSession() else result.message
-        val reply = CareerReplyParser.parse((result as ApiResult.Success).body) ?: return "Kwela sent a reply the app couldn’t read. Please try again."
-        val now = System.currentTimeMillis()
-        reply.documents.forEachIndexed { index, document ->
-            repository.saveDocument(SavedDocumentEntity(UUID.randomUUID().toString(), document.title, document.body, now + index))
+    /** The person tapped a line in a document and said what should change. */
+    fun sendChangeRequest(documentLabel: String, line: String, note: String) {
+        mutableState.value = mutableState.value.copy(screen = AppScreen.CHAT)
+        sendText(ChangeRequest.message(documentLabel, line, note))
+    }
+
+    private val skippedChecks = mutableSetOf<String>()
+
+    /** True when this document has already been waved through the missing-details check. */
+    fun checkSkipped(documentId: String): Boolean = documentId in skippedChecks
+
+    /** A CV is about to go out with details missing. Ask first, in the chat, like a friend would. */
+    fun askBeforeDownload(documentId: String, gaps: List<String>, share: Boolean = false) {
+        viewModelScope.launch {
+            repository.savePendingReview(null)
+            repository.sayLocally("Quick check before this goes out: I don’t have ${ContactGaps.sentence(gaps)} on it. Want to add ${if (gaps.size == 1) "it" else "them"}?")
+            mutableState.value = mutableState.value.copy(screen = AppScreen.CHAT, downloadGate = DownloadGate(documentId, gaps, share), pendingReview = null)
         }
-        val filesNote = if (reply.documents.isEmpty()) "" else "\n\nSaved to Files: " + reply.documents.joinToString(", ") { it.title } + "."
-        repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "ASSISTANT", reply.message + filesNote, now + reply.documents.size, applicationJson = reply.applicationJson))
-        reply.candidateProfileJson?.let { profile ->
-            repository.saveCandidateProfile(profile)
-            api.saveProfile(token, profile)
-        }
-        return null
     }
 
-    /** Ends a session the server no longer accepts and sends the person back to sign in. */
-    private suspend fun expireSession(): String? {
-        repository.signOut()
-        mutableState.value = mutableState.value.copy(message = "Please sign in again.", screen = AppScreen.CHAT)
-        return null
+    fun addMissingDetails() {
+        val gate = mutableState.value.downloadGate ?: return
+        sendText("Let me add ${ContactGaps.sentence(gate.gaps).removePrefix("your ")}")
     }
 
-    fun sendSuggestion(prompt: String) { setDraft(prompt); sendDraft() }
+    fun downloadAnyway() {
+        val gate = mutableState.value.downloadGate ?: return
+        skippedChecks += gate.documentId
+        mutableState.value = mutableState.value.copy(downloadGate = null, downloadNowId = gate.documentId, downloadNowShare = gate.share)
+    }
+
+    fun downloadHandled() { mutableState.value = mutableState.value.copy(downloadNowId = null, downloadNowShare = false) }
 
     fun attachFile(uriString: String) {
         val file = AttachmentReader(getApplication()).describe(Uri.parse(uriString))
@@ -282,6 +350,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signOut() {
         viewModelScope.launch {
+            WorkManager.getInstance(getApplication<Application>()).cancelUniqueWork(ReplyWorker.UNIQUE)
             repository.sessionToken()?.let { api.signOut(it) }
             repository.signOut()
             mutableState.value = mutableState.value.copy(screen = AppScreen.CHAT)
@@ -290,6 +359,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteAccount() {
         viewModelScope.launch {
+            WorkManager.getInstance(getApplication<Application>()).cancelUniqueWork(ReplyWorker.UNIQUE)
             val token = repository.sessionToken()
             val remote = if (token != null) api.deleteAccount(token) else null
             taskJob?.cancel()

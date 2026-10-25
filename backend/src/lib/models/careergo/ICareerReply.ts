@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { shapeBubbles } from "./bubbles.ts";
+import { reviewResume, type IReviewFinding } from "./review.ts";
 import { applicationPackSchema } from "./IApplicationPack.ts";
 import type { IApplicationPack } from "./IApplicationPack.ts";
 import { careergoResumeSchema } from "./ICareergoResume.ts";
@@ -24,6 +26,10 @@ export interface ICareerReply {
      * Reusable CV profile extracted during this turn, when available.
      */
     candidateProfile: ICareergoResume | null;
+    /**
+     * Things worth checking with the person before they send the CV, found by fixed rules. Empty when there is nothing to ask.
+     */
+    review: IReviewFinding[];
 }
 
 /**
@@ -43,8 +49,9 @@ export const careerReplySchema = z.object({
 export function normalizeCareerReply(reply: z.infer<typeof careerReplySchema>): ICareerReply {
     return {
         type: reply.type,
-        message: reply.message,
+        message: shapeBubbles(reply.message),
         applicationPack: reply.applicationPack ?? null,
-        candidateProfile: reply.candidateProfile ?? null
+        candidateProfile: reply.candidateProfile ?? null,
+        review: reply.applicationPack ? reviewResume(reply.applicationPack.resume) : []
     };
 }

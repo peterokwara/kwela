@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import app.kwela.data.local.KwelaDatabase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,6 +39,28 @@ class KwelaDatabaseMigrationTest {
         upgraded.query("SELECT applicationJson FROM chat_messages WHERE id = 'm1'").use { cursor ->
             cursor.moveToFirst()
             assertEquals("{\"job\":{}}", cursor.getString(0))
+        }
+    }
+
+    @Test
+    fun upgradingToVersionThreeKeepsDocumentsAndMessages() {
+        helper.createDatabase("kwela-migration-3-test.db", 2).apply {
+            execSQL("INSERT INTO saved_documents (id, title, body, createdAt) VALUES ('d1', 'CV', 'Amina', 1000)")
+            execSQL("INSERT INTO chat_messages (id, role, content, createdAt, attachmentName, attachmentUri, applicationJson) VALUES ('m1', 'ASSISTANT', 'Done', 2000, NULL, NULL, NULL)")
+            close()
+        }
+
+        val upgraded = helper.runMigrationsAndValidate("kwela-migration-3-test.db", 3, true, KwelaDatabase.MIGRATION_2_3)
+        upgraded.query("SELECT title, body, kind, groupId FROM saved_documents WHERE id = 'd1'").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals("CV", cursor.getString(0))
+            assertEquals("Amina", cursor.getString(1))
+            assertTrue(cursor.isNull(2) && cursor.isNull(3))
+        }
+        upgraded.query("SELECT content, documentGroupId FROM chat_messages WHERE id = 'm1'").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals("Done", cursor.getString(0))
+            assertTrue(cursor.isNull(1))
         }
     }
 }

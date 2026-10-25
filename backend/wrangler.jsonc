@@ -9,8 +9,9 @@
         "MAX_REQUESTS_PER_MINUTE": "4",
         "INPUT_PRICE_PER_MILLION_USD": "0.10",
         "OUTPUT_PRICE_PER_MILLION_USD": "0.50",
-        "AUTH_TEST_EMAILS": "ojakaapeter@gmail.com,cliff.gor.dev@gmail.com"
+        "AUTH_TEST_EMAILS": "ojakaapeter@gmail.com,cliff.gor.dev@gmail.com,ojakaapeter+kwela-scenarios@gmail.com"
     },
+    "observability": { "enabled": true },
     "browser": {
         "binding": "BROWSER",
         "remote": true

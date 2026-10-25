@@ -3,10 +3,14 @@ package app.kwela.ui
 import app.kwela.data.local.ApplicationTaskEntity
 import app.kwela.data.local.ChatMessageEntity
 import app.kwela.data.local.SavedDocumentEntity
+import app.kwela.domain.ReviewFinding
 import app.kwela.domain.ThemeMode
 
 /** A file the user picked that will be sent with their next message. */
 data class PendingAttachment(val name: String, val uri: String)
+
+/** Asked before a CV goes out with details missing. */
+data class DownloadGate(val documentId: String, val gaps: List<String>, val share: Boolean = false)
 
 data class KwelaUiState(
     val isRestoring: Boolean = true,
@@ -25,8 +29,13 @@ data class KwelaUiState(
     val loginError: String? = null,
     val pendingAttachment: PendingAttachment? = null,
     val isReplying: Boolean = false,
+    val replyIsSlow: Boolean = false,
     val replyError: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    val pendingReview: ReviewFinding? = null,
+    val downloadGate: DownloadGate? = null,
+    val downloadNowId: String? = null,
+    val downloadNowShare: Boolean = false
 ) {
     val activeTask: ApplicationTaskEntity?
         get() = tasks.firstOrNull { it.status == "RUNNING" || it.status == "WAITING_FOR_USER" || it.status == "QUEUED" }

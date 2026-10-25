@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface KwelaDao {
+    @Query("DELETE FROM chat_messages WHERE id = :id")
+    suspend fun deleteMessage(id: String)
+
     @Query("SELECT * FROM chat_messages ORDER BY createdAt ASC")
     fun observeMessages(): Flow<List<ChatMessageEntity>>
 
