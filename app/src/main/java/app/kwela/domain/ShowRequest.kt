@@ -15,7 +15,7 @@ enum class ShowRequest(val label: String, val kind: String) {
     companion object {
         private val looking = Regex("\\b(look|see|show|view|open|check|read|pull up|display|where|send me|give me|have a)\\b")
         private val bareWords = setOf("cv", "resume", "resum\u00e9", "cover", "letter", "job", "jd", "description", "answers", "answer", "my", "the", "pls", "plz", "please", "now", "quick", "quickly", "a")
-        private val changing = Regex("\\b(change|edit|make|write|draft|update|redo|rewrite|prepare|fix|shorter|simpler|add|do my|review|typo|weak|improve|tell me|about|why|how|better|good|mistake|wrong|score|proofread)\\b")
+        private val changing = Regex("\\b(change|edit|make|write|draft|update|redo|rewrite|prepare|fix|shorter|simpler|add|do my|review|typo|weak|improve|tell me|about|why|how|better|good|mistake|wrong|score|proofread)")
 
         /** The file being asked for, or null when this is not a "show me" request and the writer should answer. */
         fun parse(text: String): ShowRequest? {
