@@ -19,7 +19,9 @@ enum class ShowRequest(val label: String, val kind: String) {
         /** The file being asked for, or null when this is not a "show me" request and the writer should answer. */
         fun parse(text: String): ShowRequest? {
             val said = text.lowercase()
-            if (said.split(Regex("\\s+")).size > 12 || !looking.containsMatchIn(said) || changing.containsMatchIn(said)) return null
+            val words = said.split(Regex("\\s+")).size
+            // A bare "cv pls" counts too: someone mid-task types as little as they can.
+            if (words > 12 || (words > 4 && !looking.containsMatchIn(said)) || changing.containsMatchIn(said)) return null
             return when {
                 Regex("\\b(job (description|breakdown|summary|ad|details)|the job|jd|the ad)\\b").containsMatchIn(said) -> JOB
                 Regex("\\b(cover letter|letter)\\b").containsMatchIn(said) -> LETTER

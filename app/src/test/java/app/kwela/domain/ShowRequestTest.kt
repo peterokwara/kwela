@@ -24,4 +24,12 @@ class ShowRequestTest {
         assertNull(ShowRequest.parse("About “Cleaned reports”: Dozens"))
         assertNull(ShowRequest.parse("see my cv ".repeat(8)))
     }
+
+    @Test
+    fun aDoctorBetweenPatientsGetsTheRightFileWhateverTheTyping() {
+        assertEquals(ShowRequest.CV, ShowRequest.parse("cv pls"))
+        assertEquals(ShowRequest.CV, ShowRequest.parse("where is my cv"))
+        assertEquals(ShowRequest.LETTER, ShowRequest.parse("SHOW ME THE LETTER!!"))
+        assertEquals(ShowRequest.JOB, ShowRequest.parse("lemme see the job"))
+    }
 }
