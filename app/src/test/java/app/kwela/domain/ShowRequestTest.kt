@@ -21,6 +21,9 @@ class ShowRequestTest {
         assertNull(ShowRequest.parse("Change this line in my CV: “Cut errors” — less boastful"))
         assertNull(ShowRequest.parse("please write a cover letter for me"))
         assertNull(ShowRequest.parse("I saw a job I want"))
+        assertNull(ShowRequest.parse("can you check my cv for typos"))
+        assertNull(ShowRequest.parse("read my cv and tell me what is weak"))
+        assertNull(ShowRequest.parse("tell me about the job"))
         assertNull(ShowRequest.parse("About “Cleaned reports”: Dozens"))
         assertNull(ShowRequest.parse("see my cv ".repeat(8)))
     }

@@ -76,7 +76,8 @@ class ReplyEngine(private val context: Context, private val repository: KwelaRep
 
     private suspend fun fetchReply(): ReplyOutcome {
         val reader = AttachmentReader(context)
-        val recent = repository.messages.first().takeLast(20)
+        // The app's own bubbles ("Here's your CV") are never sent, so they must not use up the window or hide the real newest message.
+        val recent = repository.messages.first().filter { !LocalMessages.isLocal(it.id) }.takeLast(20)
         val newestUserId = recent.lastOrNull { it.role == "USER" }?.id
         val history = withContext(Dispatchers.IO) {
             recent.map { message ->
