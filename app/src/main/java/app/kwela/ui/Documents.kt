@@ -214,7 +214,7 @@ fun FilesScreen(documents: List<SavedDocumentEntity>, actions: DocumentActions) 
     Column(Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = tab.ordinal, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
             FileTab.entries.forEach { entry ->
-                val count = if (entry == FileTab.JOBS) documents.size else documents.count { FileTab.of(it.kind, it.title) == entry }
+                val count = if (entry == FileTab.JOBS) documents.map { it.groupId ?: it.id }.distinct().size else documents.count { FileTab.of(it.kind, it.title) == entry }
                 Tab(selected = tab == entry, onClick = { tab = entry }, text = { Text("${entry.label} · $count") })
             }
         }
