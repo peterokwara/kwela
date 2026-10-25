@@ -2,7 +2,7 @@
 
 The Cloudflare Worker behind the Kwela Android app. It is its own project with its own D1 database, secrets and deployment. It shares nothing with any other Worker.
 
-The agent code (career partner, CV extraction, job research, application drafting), spending limits and Careergo document shapes were copied from Chaji and renamed. Kwela chats live on the phone, so there is no conversation storage here.
+The agent code (career partner, CV extraction, job research, application drafting), spending limits and Careergo document shapes were copied from Chaji and renamed. Kwela chats and their compacted conversation memory live on the phone; the Worker processes the memory for a reply but does not store it.
 
 ## Routes
 
@@ -14,7 +14,7 @@ People sign in with their email address and a 6-digit code (no passwords). `POST
 | POST | `/auth/request-code` | Takes `{ email }` and emails a 6-digit code (valid 10 minutes, 3 requests per 15 minutes per address and 10 requests per 15 minutes per source IP). |
 | POST | `/auth/verify` | Takes `{ email, code }` (5 tries per code) and returns `{ token, email }`. |
 | POST | `/auth/sign-out` | Revokes the session token. |
-| POST | `/api/chat` | Takes `{ messages }` and returns the agent's JSON reply: `{ type, message, applicationPack, candidateProfile, review }`. `message` is up to four short bubbles separated by blank lines. `review` holds up to three things the writer wants to check, found by fixed rules (a duty with no result, a line with no numbers). A reply that fails after retries is a real error, never a pretend message. Enforces the spending limits. |
+| POST | `/api/chat` | Takes `{ messages, conversationContext? }` and returns the agent's JSON reply, including updated `conversationContext`. The app saves that compact summary on the phone and sends it with later turns. `message` is up to four short bubbles separated by blank lines. `review` holds up to three things the writer wants to check, found by fixed rules (a duty with no result, a line with no numbers). A reply that fails after retries is a real error, never a pretend message. Enforces the spending limits. |
 | GET, PUT, DELETE | `/api/candidate-profile` | Reads, saves or removes the owner's saved CV profile. |
 | POST | `/api/documents/pdf` | Renders a CV or cover letter draft (`{ type: "resume" \| "cover_letter", document }`) to PDF with Browser Run. |
 | DELETE | `/api/account` | Removes the account, its sessions, pending codes and saved CV profile. Usage records stay under the keyed opaque identifier, so deleting and re-creating an account cannot reset the spending cap. |

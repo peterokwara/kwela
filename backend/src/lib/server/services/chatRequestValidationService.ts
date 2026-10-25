@@ -1,6 +1,8 @@
 import { applicationPackSchema } from "../../models/careergo/IApplicationPack.ts";
 import type { IChatAttachment } from "../../models/chat/IChatAttachment.ts";
 import type { IChatMessage } from "../../models/chat/IChatMessage.ts";
+import { conversationContextSchema } from "../../models/chat/conversationContextSchema.ts";
+import type { IConversationContext } from "../../models/chat/IConversationContext.ts";
 import { CHAT_ATTACHMENT_POLICY, isSupportedChatFile } from "../../models/chat/chatAttachmentPolicy.ts";
 
 /**
@@ -12,7 +14,7 @@ const maximumRequestLength = 32 * 1024 * 1024;
  */
 const maximumMessages = 40;
 
-type ChatRequestResult = { messages: IChatMessage[] } | { response: Response };
+type ChatRequestResult = { messages: IChatMessage[]; conversationContext: IConversationContext | null } | { response: Response };
 
 /** Creates a JSON error response for invalid chat requests.
  * @param message User-facing explanation.
@@ -98,7 +100,7 @@ export async function readChatMessages(request: Request): Promise<ChatRequestRes
         };
     }
 
-    let body: { messages?: unknown };
+    let body: { messages?: unknown; conversationContext?: unknown };
     try {
         const rawBody = await request.text();
         if (new TextEncoder().encode(rawBody).byteLength > maximumRequestLength) {
@@ -138,5 +140,9 @@ export async function readChatMessages(request: Request): Promise<ChatRequestRes
             )
         };
     }
-    return { messages: body.messages };
+    const context = body.conversationContext === undefined || body.conversationContext === null
+        ? null
+        : conversationContextSchema.safeParse(body.conversationContext);
+    if (context && !context.success) return { response: badRequest("The saved conversation context is invalid.", 400) };
+    return { messages: body.messages, conversationContext: context?.data ?? null };
 }

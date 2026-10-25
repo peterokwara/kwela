@@ -23,13 +23,14 @@ data class OutgoingMessage(
 /** Builds the JSON body the Kwela API expects for one chat turn. */
 object ChatRequestBuilder {
     private const val MAX_MESSAGES = 20
-    private const val DEFAULT_MAX_ENCODED_FILE_CHARS = 27_000_000
+    private const val DEFAULT_MAX_ENCODED_FILE_CHARS = 28_000_000
     private const val SAVED_PROFILE_NOTE = "Saved CV profile for this person. Reuse it when preparing job materials."
 
     fun build(
         messages: List<OutgoingMessage>,
         savedProfileJson: String?,
-        maxEncodedFileChars: Int = DEFAULT_MAX_ENCODED_FILE_CHARS
+        maxEncodedFileChars: Int = DEFAULT_MAX_ENCODED_FILE_CHARS,
+        conversationContextJson: String? = null
     ): String {
         val window = messages.filterNot { LocalMessages.isLocal(it.id) }.takeLast(if (savedProfileJson != null) MAX_MESSAGES - 1 else MAX_MESSAGES)
         val kept = keepNewestFiles(window, maxEncodedFileChars)
@@ -46,6 +47,7 @@ object ChatRequestBuilder {
                 }
                 kept.forEachIndexed { index, message -> add(messageJson(message, includeDraft = index == newestDraft)) }
             })
+            if (conversationContextJson != null) put("conversationContext", Json.parseToJsonElement(conversationContextJson))
         }
         return body.toString()
     }

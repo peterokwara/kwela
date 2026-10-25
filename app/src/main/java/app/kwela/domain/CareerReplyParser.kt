@@ -21,7 +21,8 @@ data class CareerReply(
     val candidateProfileJson: String?,
     val applicationJson: String? = null,
     val groupTitle: String? = null,
-    val review: List<ReviewFinding> = emptyList()
+    val review: List<ReviewFinding> = emptyList(),
+    val conversationContextJson: String? = null
 )
 
 /** Reads the JSON reply from the Kwela API into chat text and readable documents. */
@@ -31,7 +32,8 @@ object CareerReplyParser {
         val message = root.text("message") ?: return null
         val profile = root["candidateProfile"]?.takeIf { it !is JsonNull }?.toString()
         val pack = root["applicationPack"] as? JsonObject
-        return CareerReply(message, if (pack != null) documentsFrom(pack) else emptyList(), profile, pack?.toString(), pack?.let(::groupTitleFrom), reviewFrom(root))
+        val context = root["conversationContext"]?.takeIf { it !is JsonNull }?.toString()
+        return CareerReply(message, if (pack != null) documentsFrom(pack) else emptyList(), profile, pack?.toString(), pack?.let(::groupTitleFrom), reviewFrom(root), context)
     }
 
     private fun reviewFrom(root: JsonObject): List<ReviewFinding> = root.list("review").mapNotNull { item ->

@@ -28,6 +28,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /** What came of asking the writer for a reply. */
 class ReplyOutcome(
@@ -80,20 +82,37 @@ class ReplyEngine(private val context: Context, private val repository: KwelaRep
         val reader = AttachmentReader(context)
         // The app's own bubbles ("Here's your CV") are never sent, so they must not use up the window or hide the real newest message.
         val recent = repository.messages.first().filter { !LocalMessages.isLocal(it.id) }.takeLast(20)
+        val contextJson = repository.conversationContext.first()
         val newestUserId = recent.lastOrNull { it.role == "USER" }?.id
+        val contextCursor = contextJson?.let { raw ->
+            runCatching {
+                (Json.parseToJsonElement(raw) as? JsonObject)?.get("throughMessageId")?.jsonPrimitive?.content
+            }.getOrNull()
+        }
+        val cursorIndex = contextCursor?.let { id -> recent.indexOfFirst { it.id == id } } ?: -1
+        val compactFrom = if (cursorIndex < 0) 0 else cursorIndex + 1
+        val compactUntil = (recent.size - 12).coerceAtLeast(0)
+        val compactingFileIds = if (compactUntil - compactFrom >= 6) {
+            recent.subList(compactFrom, compactUntil).map { it.id }.toSet()
+        } else emptySet()
         val history = withContext(Dispatchers.IO) {
             recent.map { message ->
-                // Only the newest message carries its file. Earlier files are already summarised in the saved CV profile.
-                val uri = message.attachmentUri.takeIf { message.id == newestUserId }
+                // Re-send older attachments only when their turns are about to be compacted.
+                val uri = message.attachmentUri.takeIf { message.id == newestUserId || message.id in compactingFileIds }
                 val file = uri?.let { reader.read(message.id, Uri.parse(it)) }
-                if (uri != null && file == null) return@withContext null
+                if (uri != null && file == null && message.id == newestUserId) return@withContext null
                 OutgoingMessage(message.id, if (message.role == "USER") OutgoingRole.USER else OutgoingRole.ASSISTANT, message.content, listOfNotNull(file), message.applicationJson)
             }
         } ?: return ReplyOutcome(error = "Kwela couldn’t read your attached file. Attach it again.")
         val token = repository.sessionToken() ?: return expired()
-        val result = api.chat(token, ChatRequestBuilder.build(history, repository.candidateProfile.first()))
+        val result = api.chat(token, ChatRequestBuilder.build(
+            history,
+            repository.candidateProfile.first(),
+            conversationContextJson = contextJson
+        ))
         if (result is ApiResult.Failure) return if (result.status == 401) expired() else ReplyOutcome(error = result.message)
         val reply = CareerReplyParser.parse((result as ApiResult.Success).body) ?: return ReplyOutcome(error = "Kwela sent a reply the app couldn’t read. Please try again.")
+        reply.conversationContextJson?.let { context -> repository.saveConversationContext(context) }
 
         val now = System.currentTimeMillis()
         // A revision of a job already written for updates those files, so there is only ever one CV, one letter and one job breakdown per job.

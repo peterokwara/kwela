@@ -1,4 +1,5 @@
 import type { IChatMessage } from "../chat/IChatMessage.ts";
+import type { IConversationContext } from "../chat/IConversationContext.ts";
 
 /**
  * Contract for producing a streamed career-assistant reply.
@@ -11,6 +12,7 @@ export interface ICareerAssistant {
      */
     respond(
         messages: readonly IChatMessage[],
-        onUsage?: (usage: { inputTokens: number; outputTokens: number } | null) => void
+        onUsage?: (usage: { inputTokens: number; outputTokens: number } | null) => void,
+        context?: IConversationContext | null
     ): Promise<ReadableStream<Uint8Array>>;
 }

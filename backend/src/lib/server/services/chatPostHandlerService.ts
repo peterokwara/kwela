@@ -47,7 +47,7 @@ export function createChatPostHandler(assistant: ICareerAssistant, usage?: IChat
         try {
             const stream = await assistant.respond(result.messages.slice(-20), (used) => {
                 costMicros += used && usage ? estimateCostMicros(used, usage.prices) : MINIMUM_CHARGE_MICROS;
-            });
+            }, result.conversationContext);
             return new Response(stream, {
                 headers: {
                     "content-type": "text/plain; charset=utf-8",

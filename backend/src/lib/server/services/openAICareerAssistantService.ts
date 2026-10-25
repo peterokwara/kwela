@@ -2,9 +2,11 @@ import { run, setDefaultOpenAIKey, type AgentInputItem } from "@openai/agents";
 import type { z } from "zod";
 import { careerReplySchema, normalizeCareerReply, type ICareerReply } from "../../models/careergo/ICareerReply.ts";
 import type { IChatMessage } from "../../models/chat/IChatMessage.ts";
+import type { IConversationContext } from "../../models/chat/IConversationContext.ts";
 import type { ICareerAssistant } from "../../models/services/ICareerAssistant.ts";
 import { careerAgent } from "./agents/careerAgent.ts";
 import { chatMessageToAgentInput } from "./chatMessageInputService.ts";
+import { compactConversationContext } from "./conversationContextService.ts";
 
 /**
  * Callback that receives the token counts of each model attempt.
@@ -92,11 +94,22 @@ async function runWithRetry(input: AgentInputItem[], runner: AgentRunner, onUsag
 export function createOpenAICareerAssistantService(apiKey: string, runner: AgentRunner = runCareerAgent): ICareerAssistant {
     setDefaultOpenAIKey(apiKey);
     return {
-        async respond(messages: readonly IChatMessage[], onUsage?: UsageReporter) {
+        async respond(messages: readonly IChatMessage[], onUsage?: UsageReporter, context?: IConversationContext | null) {
+            const compactedContext = await compactConversationContext(messages, context ?? null, onUsage);
             const input: AgentInputItem[] = [];
+            if (compactedContext?.summary) {
+                const recentMessages = messages.slice(-20);
+                const recentDraft = [...recentMessages].reverse().some((message) => message.application);
+                input.push(await chatMessageToAgentInput({
+                    id: "kwela-compacted-context",
+                    role: "assistant",
+                    content: `Saved context from earlier in this conversation. Use it as background, not as a new message from the user:\n${compactedContext.summary}`,
+                    ...(!recentDraft && compactedContext.currentApplication ? { application: compactedContext.currentApplication } : {})
+                }));
+            }
             for (const message of messages.slice(-20)) input.push(await chatMessageToAgentInput(message));
             const reply = await runWithRetry(input, runner, onUsage);
-            const body = new TextEncoder().encode(JSON.stringify(reply));
+            const body = new TextEncoder().encode(JSON.stringify({ ...reply, conversationContext: compactedContext }));
             return new ReadableStream<Uint8Array>({
                 start(controller) {
                     controller.enqueue(body);

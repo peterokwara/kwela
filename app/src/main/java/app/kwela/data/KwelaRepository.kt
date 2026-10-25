@@ -35,6 +35,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
 
     val pendingReviewJson: Flow<String?> = appContext.preferencesDataStore.data.map { it[REVIEW_KEY] }
     val candidateProfile: Flow<String?> = appContext.preferencesDataStore.data.map { it[PROFILE_KEY] }
+    val conversationContext: Flow<String?> = appContext.preferencesDataStore.data.map { it[CONVERSATION_CONTEXT_KEY] }
     val notificationsEnabled: Flow<Boolean> = appContext.preferencesDataStore.data.map { it[NOTIFICATIONS_KEY] ?: true }
 
     suspend fun saveMessage(message: ChatMessageEntity) = dao.saveMessage(message)
@@ -57,7 +58,10 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
             dao.clearTasks()
         }
         appContext.preferencesDataStore.edit { preferences ->
-            if (changedAccount) preferences.remove(PROFILE_KEY)
+            if (changedAccount) {
+                preferences.remove(PROFILE_KEY)
+                preferences.remove(CONVERSATION_CONTEXT_KEY)
+            }
             preferences[DATA_OWNER_EMAIL_KEY] = normalizedEmail
             preferences[EMAIL_KEY] = normalizedEmail
             preferences[TOKEN_KEY] = sessionToken
@@ -135,6 +139,10 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
         appContext.preferencesDataStore.edit { it[PROFILE_KEY] = profileJson }
     }
 
+    suspend fun saveConversationContext(contextJson: String) {
+        appContext.preferencesDataStore.edit { it[CONVERSATION_CONTEXT_KEY] = contextJson }
+    }
+
     suspend fun clearUserData() {
         dao.clearMessages()
         dao.clearDocuments()
@@ -148,6 +156,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
             preferences.remove(REPLY_ERROR_KEY)
             preferences.remove(ANSWERED_KEY)
             preferences.remove(PROFILE_KEY)
+            preferences.remove(CONVERSATION_CONTEXT_KEY)
             preferences.remove(DATA_OWNER_EMAIL_KEY)
         }
     }
@@ -158,6 +167,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
         val PENDING_SHARE_KEY = stringPreferencesKey("pending_shared_text")
         val TOKEN_KEY = stringPreferencesKey("device_token")
         val PROFILE_KEY = stringPreferencesKey("candidate_profile")
+        val CONVERSATION_CONTEXT_KEY = stringPreferencesKey("conversation_context")
         val REPLY_ERROR_KEY = stringPreferencesKey("reply_error")
         val SIGN_IN_NOTICE_KEY = stringPreferencesKey("sign_in_notice")
         val ANSWERED_KEY = stringPreferencesKey("answered_review_lines")
