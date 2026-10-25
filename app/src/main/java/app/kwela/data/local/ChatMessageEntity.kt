@@ -13,5 +13,7 @@ data class ChatMessageEntity(
     val attachmentUri: String? = null,
     val applicationJson: String? = null,
     /** The group of documents this reply produced, shown as cards under it. */
-    val documentGroupId: String? = null
+    val documentGroupId: String? = null,
+    /** One file shown as a card under this message, such as when someone asks to see their CV. */
+    val documentId: String? = null
 )

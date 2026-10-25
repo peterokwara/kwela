@@ -14,7 +14,7 @@ class KwelaApplication : Application() {
     }
 
     val database: KwelaDatabase by lazy {
-        Room.databaseBuilder(this, KwelaDatabase::class.java, "kwela.db").addMigrations(KwelaDatabase.MIGRATION_1_2, KwelaDatabase.MIGRATION_2_3).build()
+        Room.databaseBuilder(this, KwelaDatabase::class.java, "kwela.db").addMigrations(KwelaDatabase.MIGRATION_1_2, KwelaDatabase.MIGRATION_2_3, KwelaDatabase.MIGRATION_3_4).build()
     }
 
     val repository: KwelaRepository by lazy { KwelaRepository(this, database) }

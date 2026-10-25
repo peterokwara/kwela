@@ -63,4 +63,20 @@ class KwelaDatabaseMigrationTest {
             assertTrue(cursor.isNull(1))
         }
     }
+
+    @Test
+    fun upgradingToVersionFourKeepsMessagesAndAddsTheFileLink() {
+        helper.createDatabase("kwela-migration-4-test.db", 3).apply {
+            execSQL("INSERT INTO chat_messages (id, role, content, createdAt, attachmentName, attachmentUri, applicationJson, documentGroupId) VALUES ('m1', 'ASSISTANT', 'Done', 2000, NULL, NULL, NULL, 'g1')")
+            close()
+        }
+
+        val upgraded = helper.runMigrationsAndValidate("kwela-migration-4-test.db", 4, true, KwelaDatabase.MIGRATION_3_4)
+        upgraded.query("SELECT content, documentGroupId, documentId FROM chat_messages WHERE id = 'm1'").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals("Done", cursor.getString(0))
+            assertEquals("g1", cursor.getString(1))
+            assertTrue(cursor.isNull(2))
+        }
+    }
 }

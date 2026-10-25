@@ -226,7 +226,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** "Let me see the CV": answered right here, with no wait. The file opens and the chat keeps a note of what was shown. */
+    /** "Let me see the CV": answered right here, with no wait. The file comes back as a card in the chat, ready to open. */
     private fun showFile(said: String, wanted: ShowRequest) {
         mutableState.value = mutableState.value.copy(replyError = null)
         viewModelScope.launch {
@@ -240,13 +240,10 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                     else "I haven’t made a ${wanted.label} for you yet.\n\nTell me which job it’s for and I’ll start."
                 )
             } else {
-                repository.sayLocally("Here’s your ${wanted.label}${document.groupTitle?.let { " for $it" }.orEmpty()}.")
-                mutableState.value = mutableState.value.copy(openDocumentId = document.id)
+                repository.sayLocally("Here’s your ${wanted.label}${document.groupTitle?.let { " for $it" }.orEmpty()}.", document.id)
             }
         }
     }
-
-    fun openHandled() { mutableState.value = mutableState.value.copy(openDocumentId = null) }
 
     fun retryReply() {
         if (mutableState.value.isReplying) return

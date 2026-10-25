@@ -8,6 +8,8 @@ import app.kwela.data.remote.ApiResult
 import app.kwela.data.remote.KwelaApi
 import app.kwela.domain.CareerReplyParser
 import app.kwela.domain.ChatRequestBuilder
+import app.kwela.domain.DocumentUpdates
+import app.kwela.domain.FileEntry
 import app.kwela.domain.LocalMessages
 import app.kwela.domain.OutgoingMessage
 import app.kwela.domain.OutgoingRole
@@ -94,10 +96,16 @@ class ReplyEngine(private val context: Context, private val repository: KwelaRep
         val reply = CareerReplyParser.parse((result as ApiResult.Success).body) ?: return ReplyOutcome(error = "Kwela sent a reply the app couldn’t read. Please try again.")
 
         val now = System.currentTimeMillis()
-        val groupId = UUID.randomUUID().toString()
+        // A revision of a job already written for updates those files, so there is only ever one CV, one letter and one job breakdown per job.
+        val saved = repository.documents.first()
+        val plan = DocumentUpdates.plan(
+            saved.map { FileEntry(it.id, it.title, it.groupId, it.groupTitle, it.createdAt, it.kind) }, reply.groupTitle.orEmpty(), reply.documents.map { it.kind }
+        )
+        val groupId = plan.groupId ?: UUID.randomUUID().toString()
         reply.documents.forEachIndexed { index, document ->
+            val id = plan.replace[document.kind] ?: UUID.randomUUID().toString()
             repository.saveDocument(
-                SavedDocumentEntity(UUID.randomUUID().toString(), document.title, document.body, now + index, document.kind.ifEmpty { null }, document.sourceJson, groupId, reply.groupTitle)
+                SavedDocumentEntity(id, document.title, document.body, now + index, document.kind.ifEmpty { null }, document.sourceJson, groupId, reply.groupTitle)
             )
         }
         repository.saveMessage(

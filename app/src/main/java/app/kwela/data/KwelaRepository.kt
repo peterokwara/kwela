@@ -119,9 +119,9 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     }
 
     /** Adds a short bubble written by the app itself. It is shown in the chat but never sent to the writer. Returns its id. */
-    suspend fun sayLocally(text: String): String {
+    suspend fun sayLocally(text: String, documentId: String? = null): String {
         val id = app.kwela.domain.LocalMessages.PREFIX + java.util.UUID.randomUUID()
-        dao.saveMessage(ChatMessageEntity(id, "ASSISTANT", text, System.currentTimeMillis()))
+        dao.saveMessage(ChatMessageEntity(id, "ASSISTANT", text, System.currentTimeMillis(), documentId = documentId))
         return id
     }
 

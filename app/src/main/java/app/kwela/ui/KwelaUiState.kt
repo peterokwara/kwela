@@ -35,9 +35,7 @@ data class KwelaUiState(
     val pendingReview: ReviewFinding? = null,
     val downloadGate: DownloadGate? = null,
     val downloadNowId: String? = null,
-    val downloadNowShare: Boolean = false,
-    /** A file the person asked to see in the chat. The screen opens it, then clears this. */
-    val openDocumentId: String? = null
+    val downloadNowShare: Boolean = false
 ) {
     val activeTask: ApplicationTaskEntity?
         get() = tasks.firstOrNull { it.status == "RUNNING" || it.status == "WAITING_FOR_USER" || it.status == "QUEUED" }

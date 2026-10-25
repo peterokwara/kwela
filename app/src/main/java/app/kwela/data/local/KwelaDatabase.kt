@@ -7,13 +7,20 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [ChatMessageEntity::class, ApplicationTaskEntity::class, SavedDocumentEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class KwelaDatabase : RoomDatabase() {
     abstract fun kwelaDao(): KwelaDao
 
     companion object {
+        /** Lets a chat message point at a single file. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE chat_messages ADD COLUMN documentId TEXT")
+            }
+        }
+
         /** Adds what the documents screen needs: type, structured source, job grouping, and the link from a reply to its documents. */
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {

@@ -193,9 +193,6 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                     }
                     val docActions = DocumentActions(baseActions.open, checked(false, baseActions.download), checked(true, baseActions.share), baseActions.busyDocumentId)
                     val previewDocument = state.documents.firstOrNull { it.id == previewId }
-                    LaunchedEffect(state.openDocumentId) {
-                        state.openDocumentId?.let { previewId = it; vm.openHandled() }
-                    }
                     LaunchedEffect(state.downloadNowId) {
                         state.downloadNowId?.let { id -> state.documents.firstOrNull { it.id == id }?.let(if (state.downloadNowShare) baseActions.share else baseActions.download); vm.downloadHandled() }
                     }
@@ -431,13 +428,14 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
                 item { Spacer(Modifier.height(4.dp)); KwelaBubble("Or skip this and send me your CV (a photo works) and the job. I’ll take it from there.") }
             }
         } else {
+            val newestWithGroup = remember(messages) { messages.filter { it.documentGroupId != null }.associate { it.documentGroupId to it.id } }
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
                     Column {
                         if (ChatTimeHeader.shouldShow(messages.getOrNull(index - 1)?.createdAt, message.createdAt)) {
                             Text(ChatTimeHeader.label(message.createdAt, now), Modifier.fillMaxWidth().padding(vertical = 8.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                         }
-                        MessageBubble(message, documents, docActions)
+                        MessageBubble(message, documents, docActions, showsGroupCards = message.documentGroupId == null || newestWithGroup[message.documentGroupId] == message.id)
                     }
                 }
                 items(tasks.filter { it.status == "RUNNING" || it.status == "QUEUED" }) { task -> TaskCard(task, { cancelTask(task) }) }
@@ -552,7 +550,7 @@ private fun MomentChip(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessageEntity, documents: List<SavedDocumentEntity>, docActions: DocumentActions) {
+private fun MessageBubble(message: ChatMessageEntity, documents: List<SavedDocumentEntity>, docActions: DocumentActions, showsGroupCards: Boolean) {
     val user = message.role == "USER"
     val colors = MaterialTheme.colorScheme
     val bubbles = if (user) listOf(message.content) else BubbleSplitter.split(message.content).ifEmpty { listOf(message.content) }
@@ -572,9 +570,11 @@ private fun MessageBubble(message: ChatMessageEntity, documents: List<SavedDocum
                 }
             }
         }
-        message.documentGroupId?.let { group ->
+        // Cards for a job's files sit under its newest reply only, so a revised CV is never shown twice.
+        message.documentGroupId?.takeIf { showsGroupCards }?.let { group ->
             documents.filter { it.groupId == group && it.kind != "job" }.sortedBy { it.createdAt }.forEach { ArtifactCard(it, docActions) }
         }
+        message.documentId?.let { id -> documents.firstOrNull { it.id == id }?.let { ArtifactCard(it, docActions) } }
     }
 }
 

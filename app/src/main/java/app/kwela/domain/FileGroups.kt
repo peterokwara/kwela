@@ -2,7 +2,7 @@ package app.kwela.domain
 
 import java.time.ZoneId
 
-data class FileEntry(val id: String, val title: String, val groupId: String?, val groupTitle: String?, val createdAt: Long)
+data class FileEntry(val id: String, val title: String, val groupId: String?, val groupTitle: String?, val createdAt: Long, val kind: String? = null)
 
 /** The documents Kwela wrote for one job application. */
 data class ApplicationFiles(val id: String, val title: String, val files: List<FileEntry>, val at: Long)
