@@ -214,8 +214,7 @@ fun FilesScreen(documents: List<SavedDocumentEntity>, actions: DocumentActions) 
     Column(Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = tab.ordinal, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
             FileTab.entries.forEach { entry ->
-                val count = if (entry == FileTab.JOBS) documents.map { it.groupId ?: it.id }.distinct().size else documents.count { FileTab.of(it.kind, it.title) == entry }
-                Tab(selected = tab == entry, onClick = { tab = entry }, text = { Text("${entry.label} · $count") })
+                Tab(selected = tab == entry, onClick = { tab = entry }, text = { Text(entry.label) })
             }
         }
         val shown = if (tab == FileTab.JOBS) documents else documents.filter { FileTab.of(it.kind, it.title) == tab }
@@ -248,7 +247,7 @@ fun FilesScreen(documents: List<SavedDocumentEntity>, actions: DocumentActions) 
                                 Row(Modifier.fillMaxWidth().clickable { actions.open(document) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(painterResource(DocIcons.File), null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
                                     Spacer(Modifier.width(10.dp))
-                                    Text(document.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
+                                    Text(document.title.substringBefore(" - "), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
                                     TextButton(onClick = { actions.download(document) }, enabled = actions.busyDocumentId == null) { Text(if (busy) "Preparing…" else "Download") }
                                     TextButton(onClick = { actions.share(document) }, enabled = actions.busyDocumentId == null) { Text("Share") }
                                 }
