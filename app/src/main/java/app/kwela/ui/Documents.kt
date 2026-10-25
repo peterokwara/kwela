@@ -41,6 +41,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +63,7 @@ import app.kwela.domain.DocumentBlocks
 import app.kwela.domain.FileEntry
 import app.kwela.domain.FileGroups
 import app.kwela.domain.FileNames
+import app.kwela.domain.FileTab
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -190,7 +194,7 @@ fun ArtifactCard(document: SavedDocumentEntity, actions: DocumentActions) {
     }
 }
 
-/** Files, grouped like WhatsApp media: date headings, then one card per job holding its documents. */
+/** Files, laid out like WhatsApp's media screen: tabs along the top, date headings, newest first. */
 @Composable
 fun FilesScreen(documents: List<SavedDocumentEntity>, actions: DocumentActions) {
     val colors = MaterialTheme.colorScheme
@@ -203,30 +207,51 @@ fun FilesScreen(documents: List<SavedDocumentEntity>, actions: DocumentActions) 
         }
         return
     }
+    var tab by rememberSaveable { mutableStateOf(FileTab.JOBS) }
     val now = remember { System.currentTimeMillis() }
     val byId = remember(documents) { documents.associateBy { it.id } }
-    val sections = remember(documents) { FileGroups.group(documents.map { FileEntry(it.id, it.title, it.groupId, it.groupTitle, it.createdAt) }, now) }
     val time = remember { DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH) }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        sections.forEach { section ->
-            item(key = "section-${section.label}") {
-                Text(section.label, Modifier.padding(start = 8.dp, top = 12.dp), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = colors.onSurfaceVariant)
+    Column(Modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = tab.ordinal, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
+            FileTab.entries.forEach { entry ->
+                val count = if (entry == FileTab.JOBS) documents.size else documents.count { FileTab.of(it.kind, it.title) == entry }
+                Tab(selected = tab == entry, onClick = { tab = entry }, text = { Text("${entry.label} · $count") })
             }
-            items(section.applications, key = { it.id }) { application ->
-                Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceContainer) {
-                    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 6.dp)) {
-                        Text(application.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.onSurface)
-                        Text(time.format(Instant.ofEpochMilli(application.at).atZone(ZoneId.systemDefault())), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                        Spacer(Modifier.height(4.dp))
-                        application.files.forEach { file ->
-                            val document = byId[file.id] ?: return@forEach
-                            val busy = actions.busyDocumentId == document.id
-                            Row(Modifier.fillMaxWidth().clickable { actions.open(document) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(painterResource(DocIcons.File), null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
-                                Spacer(Modifier.width(10.dp))
-                                Text(document.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
-                                TextButton(onClick = { actions.download(document) }, enabled = actions.busyDocumentId == null) { Text(if (busy) "Preparing…" else "Download") }
-                                TextButton(onClick = { actions.share(document) }, enabled = actions.busyDocumentId == null) { Text("Share") }
+        }
+        val shown = if (tab == FileTab.JOBS) documents else documents.filter { FileTab.of(it.kind, it.title) == tab }
+        if (shown.isEmpty()) {
+            Text("Nothing here yet.", Modifier.padding(20.dp), color = colors.onSurfaceVariant)
+            return@Column
+        }
+        // Resumes and Letters list each file on its own; Jobs keeps a document's job together.
+        val sections = remember(shown, tab) {
+            FileGroups.group(shown.map { FileEntry(it.id, it.title, if (tab == FileTab.JOBS) it.groupId else null, it.groupTitle, it.createdAt) }, now)
+        }
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            sections.forEach { section ->
+                item(key = "$tab-section-${section.label}") {
+                    Text(section.label, Modifier.padding(start = 8.dp, top = 12.dp), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = colors.onSurfaceVariant)
+                }
+                items(section.applications, key = { "$tab-${it.id}" }) { application ->
+                    Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceContainer) {
+                        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 6.dp)) {
+                            val single = application.files.singleOrNull()?.let { byId[it.id] }
+                            Text(
+                                if (tab != FileTab.JOBS && single?.groupTitle != null) single.groupTitle else application.title,
+                                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.onSurface
+                            )
+                            Text(time.format(Instant.ofEpochMilli(application.at).atZone(ZoneId.systemDefault())), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                            Spacer(Modifier.height(4.dp))
+                            application.files.forEach { file ->
+                                val document = byId[file.id] ?: return@forEach
+                                val busy = actions.busyDocumentId == document.id
+                                Row(Modifier.fillMaxWidth().clickable { actions.open(document) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(painterResource(DocIcons.File), null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(document.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
+                                    TextButton(onClick = { actions.download(document) }, enabled = actions.busyDocumentId == null) { Text(if (busy) "Preparing…" else "Download") }
+                                    TextButton(onClick = { actions.share(document) }, enabled = actions.busyDocumentId == null) { Text("Share") }
+                                }
                             }
                         }
                     }
