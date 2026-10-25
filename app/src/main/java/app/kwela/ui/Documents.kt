@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
@@ -267,21 +268,31 @@ fun DocumentPreviewScreen(document: SavedDocumentEntity, actions: DocumentAction
     val colors = MaterialTheme.colorScheme
     val blocks = remember(document.body) { DocumentBlocks.parse(document.body) }
     val busy = actions.busyDocumentId != null
-    var selected by remember { mutableStateOf<String?>(null) }
+    // The blocks being asked about: one line, or a whole section when its heading is tapped.
+    var selected by remember { mutableStateOf<IntRange?>(null) }
     Column(Modifier.fillMaxSize().background(colors.surface).windowInsetsPadding(WindowInsets.statusBars)) {
-        Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(close, Modifier.size(56.dp)) { Icon(painterResource(DocIcons.Back), "Back", Modifier.size(24.dp), tint = colors.onSurface) }
-            Column {
-                Text(document.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.onSurface)
-                Text(document.groupTitle?.let { "$it · Tap a line to change it" } ?: "Tap a line to change it", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+            Column(Modifier.weight(1f).padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(document.title.substringBefore(" - "), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
+                Text(document.groupTitle ?: document.title.substringAfter(" - ", ""), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                Text("Tap a line or a heading to change it", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
             }
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
-            items(blocks) { block -> BlockView(block, selected = block.canChange && block.text == selected, onTap = if (block.canChange) ({ selected = if (selected == block.text) null else block.text }) else null) }
+            itemsIndexed(blocks) { index, block ->
+                val range = when {
+                    block.canChange -> index..index
+                    block is DocBlock.Heading -> DocumentBlocks.sectionRange(blocks, index)
+                    else -> null
+                }
+                BlockView(block, selected = selected?.let { it.first <= index && index <= it.last } == true, onTap = range?.let { r -> { selected = if (selected == r) null else r } })
+            }
             item { Spacer(Modifier.height(24.dp)) }
         }
-        val line = selected
-        if (line != null) {
+        val chosen = selected
+        if (chosen != null) {
+            val line = if (blocks[chosen.first] is DocBlock.Heading) DocumentBlocks.sectionText(blocks, chosen.first) else blocks[chosen.first].text
             ChangeBar(line, cancel = { selected = null }) { note -> changeRequest(line, note) }
         } else Surface(color = colors.surfaceContainer) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -336,8 +347,8 @@ private fun BlockView(block: DocBlock, selected: Boolean = false, onTap: (() -> 
     when (block) {
         is DocBlock.Title -> Text(block.text, Modifier.padding(start = 8.dp, top = 8.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = colors.onSurface)
         is DocBlock.Subtitle -> Text(block.text, Modifier.padding(start = 8.dp, bottom = 4.dp), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-        is DocBlock.Heading -> Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 20.dp, bottom = 6.dp)) {
-            Text(block.text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = colors.primary)
+        is DocBlock.Heading -> Column(Modifier.padding(top = 20.dp, bottom = 6.dp).then(tap).padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Text(block.text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = if (selected) colors.onPrimaryContainer else colors.primary)
             HorizontalDivider(Modifier.padding(top = 4.dp), color = colors.outlineVariant)
         }
         is DocBlock.Paragraph -> Text(block.text, Modifier.fillMaxWidth().then(tap).padding(horizontal = 8.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyLarge, color = if (selected) colors.onPrimaryContainer else colors.onSurface)

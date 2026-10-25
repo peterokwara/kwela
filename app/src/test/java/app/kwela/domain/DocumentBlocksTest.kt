@@ -59,4 +59,15 @@ class DocumentBlocksTest {
     fun anEmptyDocumentHasNoBlocks() {
         assertEquals(emptyList<DocBlock>(), DocumentBlocks.parse("  \n\n "))
     }
+
+    @Test
+    fun aHeadingOwnsEverythingUpToTheNextHeading() {
+        val blocks = DocumentBlocks.parse("Ann Doe\nann@x.com\n\nSUMMARY\nCook with five years.\n\nEXPERIENCE\nCook, Serena\n- Fed 200 guests a night\n\nSKILLS\nKnife work")
+
+        val experience = blocks.indexOfFirst { it.text == "EXPERIENCE" }
+
+        assertEquals(experience..experience + 2, DocumentBlocks.sectionRange(blocks, experience))
+        assertEquals("EXPERIENCE\nCook, Serena\nFed 200 guests a night", DocumentBlocks.sectionText(blocks, experience))
+        assertEquals(blocks.size - 2 until blocks.size, DocumentBlocks.sectionRange(blocks, blocks.size - 2))
+    }
 }

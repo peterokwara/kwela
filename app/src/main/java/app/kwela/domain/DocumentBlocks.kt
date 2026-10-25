@@ -33,4 +33,14 @@ object DocumentBlocks {
         }
         return blocks
     }
+
+    /** Index range of the section a heading opens: the heading and everything up to the next heading. */
+    fun sectionRange(blocks: List<DocBlock>, headingIndex: Int): IntRange {
+        val next = (headingIndex + 1 until blocks.size).firstOrNull { blocks[it] is DocBlock.Heading } ?: blocks.size
+        return headingIndex until next
+    }
+
+    /** The words of a whole section, one piece per line, so it can be quoted when asking for a change. */
+    fun sectionText(blocks: List<DocBlock>, headingIndex: Int): String =
+        sectionRange(blocks, headingIndex).joinToString("\n") { blocks[it].text }
 }

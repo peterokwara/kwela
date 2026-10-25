@@ -21,4 +21,9 @@ class ChangeRequestTest {
     fun theChipsAreTheFourAgreedRequests() {
         assertEquals(listOf("Make it shorter", "Make it simpler", "Add something I forgot", "Something else"), ChangeRequest.chips)
     }
+
+    @Test
+    fun aWholeSectionIsAskedForAsASection() {
+        assertEquals("Change this section in my CV: “SKILLS\nKnife work” — add Excel", ChangeRequest.message("CV", "SKILLS\nKnife work", "add Excel"))
+    }
 }
