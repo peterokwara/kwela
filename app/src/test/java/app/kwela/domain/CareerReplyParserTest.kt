@@ -91,4 +91,25 @@ class CareerReplyParserTest {
         assertNull(CareerReplyParser.parse("not json"))
         assertNull(CareerReplyParser.parse("""{"type":"message"}"""))
     }
+
+    @Test
+    fun savesAQuickBreakdownOfTheJobWhenTheAdHadDetails() {
+        val detailed = pack.replace(
+            """"job":{"title":"Data Analyst","company":"Example Bank"}""",
+            """"job":{"title":"Data Analyst","company":"Example Bank","location":"Nairobi","salary":"","applicationDeadline":"30 Nov","jobSummary":"Turn bank data into decisions.","keyRequirements":["BSc Statistics","2 years with SQL"],"responsibilities":["Build weekly reports"],"desiredSkills":[],"contactPerson":"","contactEmail":"jobs@example.test"}"""
+        )
+
+        val job = CareerReplyParser.parse(detailed)!!.documents.last()
+
+        assertEquals("Job", job.title)
+        assertEquals("job", job.kind)
+        assertEquals(
+            "Data Analyst\nExample Bank · Nairobi · Apply by 30 Nov\n\n" +
+                "THE JOB IN A LINE\nTurn bank data into decisions.\n\n" +
+                "WHAT THEY WANT\n- BSc Statistics\n- 2 years with SQL\n\n" +
+                "WHAT YOU WILL DO\n- Build weekly reports\n\n" +
+                "SEND IT TO\njobs@example.test",
+            job.body
+        )
+    }
 }

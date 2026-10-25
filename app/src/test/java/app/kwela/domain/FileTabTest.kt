@@ -8,7 +8,8 @@ class FileTabTest {
     fun resumesAndLettersAreSeparatedByKind() {
         assertEquals(FileTab.RESUMES, FileTab.of(kind = "resume", title = "CV"))
         assertEquals(FileTab.LETTERS, FileTab.of(kind = "cover_letter", title = "Cover letter"))
-        assertEquals(null, FileTab.of(kind = "answers", title = "Application answers"))
+        assertEquals(FileTab.LETTERS, FileTab.of(kind = "answers", title = "Answers"))
+        assertEquals(FileTab.JOBS, FileTab.of(kind = "job", title = "Job"))
     }
 
     @Test

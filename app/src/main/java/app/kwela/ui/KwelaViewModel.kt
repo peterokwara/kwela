@@ -22,6 +22,7 @@ import app.kwela.domain.ChangeRequest
 import app.kwela.domain.ContactGaps
 import app.kwela.domain.ReviewFinding
 import app.kwela.domain.ReviewPrompts
+import app.kwela.domain.ShowRequest
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import app.kwela.domain.LocalMessages
@@ -207,6 +208,8 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         if ((text.isBlank() && attachment == null) || current.isReplying) return
         draftSave?.cancel()
         mutableState.value = current.copy(draftText = "", pendingAttachment = null)
+        val wanted = if (attachment == null) ShowRequest.parse(text) else null
+        if (wanted != null) { showFile(text, wanted); return }
         sendText(text.ifBlank { "Please review my file." }, attachment)
     }
 
@@ -222,6 +225,28 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             ReplyScheduler.enqueue(getApplication(), slow)
         }
     }
+
+    /** "Let me see the CV": answered right here, with no wait. The file opens and the chat keeps a note of what was shown. */
+    private fun showFile(said: String, wanted: ShowRequest) {
+        mutableState.value = mutableState.value.copy(replyError = null)
+        viewModelScope.launch {
+            repository.saveDraftNow(mutableState.value.draftText)
+            val now = System.currentTimeMillis()
+            repository.saveMessage(ChatMessageEntity(LocalMessages.PREFIX + UUID.randomUUID(), "USER", said, now))
+            val document = mutableState.value.documents.filter { wanted.matches(it.kind, it.title) }.maxByOrNull { it.createdAt }
+            if (document == null) {
+                repository.sayLocally(
+                    if (wanted == ShowRequest.JOB) "I don’t have a job to show yet.\n\nSend me the ad or its link and I’ll break it down."
+                    else "I haven’t made a ${wanted.label} for you yet.\n\nTell me which job it’s for and I’ll start."
+                )
+            } else {
+                repository.sayLocally("Here’s your ${wanted.label}${document.groupTitle?.let { " for $it" }.orEmpty()}.")
+                mutableState.value = mutableState.value.copy(openDocumentId = document.id)
+            }
+        }
+    }
+
+    fun openHandled() { mutableState.value = mutableState.value.copy(openDocumentId = null) }
 
     fun retryReply() {
         if (mutableState.value.isReplying) return

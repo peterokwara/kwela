@@ -193,6 +193,9 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                     }
                     val docActions = DocumentActions(baseActions.open, checked(false, baseActions.download), checked(true, baseActions.share), baseActions.busyDocumentId)
                     val previewDocument = state.documents.firstOrNull { it.id == previewId }
+                    LaunchedEffect(state.openDocumentId) {
+                        state.openDocumentId?.let { previewId = it; vm.openHandled() }
+                    }
                     LaunchedEffect(state.downloadNowId) {
                         state.downloadNowId?.let { id -> state.documents.firstOrNull { it.id == id }?.let(if (state.downloadNowShare) baseActions.share else baseActions.download); vm.downloadHandled() }
                     }
@@ -570,7 +573,7 @@ private fun MessageBubble(message: ChatMessageEntity, documents: List<SavedDocum
             }
         }
         message.documentGroupId?.let { group ->
-            documents.filter { it.groupId == group }.sortedBy { it.createdAt }.forEach { ArtifactCard(it, docActions) }
+            documents.filter { it.groupId == group && it.kind != "job" }.sortedBy { it.createdAt }.forEach { ArtifactCard(it, docActions) }
         }
     }
 }

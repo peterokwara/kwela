@@ -218,14 +218,14 @@ fun FilesScreen(documents: List<SavedDocumentEntity>, actions: DocumentActions) 
                 Tab(selected = tab == entry, onClick = { tab = entry }, text = { Text(entry.label) })
             }
         }
-        val shown = if (tab == FileTab.JOBS) documents else documents.filter { FileTab.of(it.kind, it.title) == tab }
+        val shown = documents.filter { FileTab.of(it.kind, it.title) == tab }
         if (shown.isEmpty()) {
             Text("Nothing here yet.", Modifier.padding(20.dp), color = colors.onSurfaceVariant)
             return@Column
         }
-        // Resumes and Letters list each file on its own; Jobs keeps a document's job together.
+        // Each file is its own card, under the job it was written for.
         val sections = remember(shown, tab) {
-            FileGroups.group(shown.map { FileEntry(it.id, it.title, if (tab == FileTab.JOBS) it.groupId else null, it.groupTitle, it.createdAt) }, now)
+            FileGroups.group(shown.map { FileEntry(it.id, it.title, null, it.groupTitle, it.createdAt) }, now)
         }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             sections.forEach { section ->
@@ -237,7 +237,7 @@ fun FilesScreen(documents: List<SavedDocumentEntity>, actions: DocumentActions) 
                         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 6.dp)) {
                             val single = application.files.singleOrNull()?.let { byId[it.id] }
                             Text(
-                                if (tab != FileTab.JOBS && single?.groupTitle != null) single.groupTitle else application.title,
+                                single?.groupTitle ?: application.title,
                                 style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.onSurface
                             )
                             Text(time.format(Instant.ofEpochMilli(application.at).atZone(ZoneId.systemDefault())), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
@@ -276,12 +276,13 @@ fun DocumentPreviewScreen(document: SavedDocumentEntity, actions: DocumentAction
             Column(Modifier.weight(1f).padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(document.title.substringBefore(" - "), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
                 Text(document.groupTitle ?: document.title.substringAfter(" - ", ""), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                Text("Tap a line or a heading to change it", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                Text(if (document.kind == "job") "A quick read of the job" else "Tap a line or a heading to change it", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
             }
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
             itemsIndexed(blocks) { index, block ->
                 val range = when {
+                    document.kind == "job" -> null
                     block.canChange -> index..index
                     block is DocBlock.Heading -> DocumentBlocks.sectionRange(blocks, index)
                     else -> null

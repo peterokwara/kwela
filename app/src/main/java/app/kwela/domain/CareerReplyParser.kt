@@ -53,7 +53,28 @@ object CareerReplyParser {
         if (answers.isNotEmpty()) {
             documents += ReplyDocument("Answers", answers.joinToString("\n\n") { "Q: ${it.text("question").orEmpty()}\nA: ${it.text("answer").orEmpty()}" }, "answers")
         }
+        pack.obj("job")?.let(::formatJob)?.let { documents += ReplyDocument("Job", it, "job") }
         return documents
+    }
+
+    /** A quick read of the job ad. Null when the ad gave nothing beyond a title, so no empty file is saved. */
+    private fun formatJob(job: JsonObject): String? {
+        val title = job.text("title").orEmpty()
+        val summary = job.text("jobSummary").orEmpty()
+        val wants = job.strings("keyRequirements")
+        val does = job.strings("responsibilities")
+        val nice = job.strings("desiredSkills")
+        if (title.isBlank() || (summary.isBlank() && wants.isEmpty() && does.isEmpty())) return null
+        val deadline = job.text("applicationDeadline")?.takeIf { it.isNotBlank() }?.let { "Apply by $it" }
+        val facts = listOf(job.text("company"), job.text("location"), job.text("salary"), deadline).filter { !it.isNullOrBlank() }.joinToString(" · ")
+        val contact = listOf(job.text("contactPerson"), job.text("contactEmail")).filter { !it.isNullOrBlank() }.joinToString(", ")
+        val sections = mutableListOf(listOf(title, facts).filter { it.isNotBlank() }.joinToString("\n"))
+        section("THE JOB IN A LINE", summary)?.let { sections += it }
+        if (wants.isNotEmpty()) sections += "WHAT THEY WANT\n" + wants.joinToString("\n") { "- $it" }
+        if (does.isNotEmpty()) sections += "WHAT YOU WILL DO\n" + does.joinToString("\n") { "- $it" }
+        if (nice.isNotEmpty()) sections += "NICE TO HAVE\n" + nice.joinToString("\n") { "- $it" }
+        section("SEND IT TO", contact)?.let { sections += it }
+        return sections.joinToString("\n\n")
     }
 
     private fun formatResume(resume: JsonObject): String {
