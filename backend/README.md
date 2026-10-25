@@ -6,15 +6,18 @@ The agent code (career partner, CV extraction, job research, application draftin
 
 ## Routes
 
-Every `/api/*` route needs `Authorization: Bearer <install token>`. The app creates a random token on first launch. The Worker stores only its SHA-256 hash as the owner id.
+People sign in with their email address and a 6-digit code (no passwords). `POST /auth/verify` returns a session token. Every `/api/*` route needs `Authorization: Bearer <session token>`. The Worker stores only hashes of codes and tokens. Usage records use a keyed opaque identifier derived from the normalized email, so deleting and recreating an account cannot reset its spending limit.
 
 | Method | Path | What it does |
 | --- | --- | --- |
 | GET | `/health` | Returns `{ "ok": true }`. No token needed. |
+| POST | `/auth/request-code` | Takes `{ email }` and emails a 6-digit code (valid 10 minutes, 3 requests per 15 minutes per address and 10 requests per 15 minutes per source IP). |
+| POST | `/auth/verify` | Takes `{ email, code }` (5 tries per code) and returns `{ token, email }`. |
+| POST | `/auth/sign-out` | Revokes the session token. |
 | POST | `/api/chat` | Takes `{ messages }` and returns the agent's JSON reply: `{ type, message, applicationPack, candidateProfile }`. Enforces the spending limits. |
 | GET, PUT, DELETE | `/api/candidate-profile` | Reads, saves or removes the owner's saved CV profile. |
 | POST | `/api/documents/pdf` | Renders a CV or cover letter draft (`{ type: "resume" \| "cover_letter", document }`) to PDF with Browser Run. |
-| DELETE | `/api/account` | Removes the owner's saved CV profile. Usage records stay, keyed only by the hashed token, so deleting cannot reset the spending cap. |
+| DELETE | `/api/account` | Removes the account, its sessions, pending codes and saved CV profile. Usage records stay under the keyed opaque identifier, so deleting and re-creating an account cannot reset the spending cap. |
 
 ## Run and check
 
@@ -31,12 +34,30 @@ pnpm run db:migrate:local
 pnpm run dev
 ```
 
+## Private closed-test sign-in
+
+The closed test uses a reusable, non-expiring six-digit code for addresses in `AUTH_TEST_EMAILS`. Testers request the code in the app, and the app displays it after the Worker accepts an allow-listed address. This sends no email and needs no custom domain. Set `AUTH_TEST_CODE` and `AUTH_SECRET` as Worker secrets, then deploy. Add each tester's address to `AUTH_TEST_EMAILS` before inviting that tester. Remove `AUTH_TEST_CODE` before public launch.
+
+For real email sign-in, configure a sender domain with an email provider. Both ZeptoMail and Cloudflare Email Service require a verified sender domain. ZeptoMail also requires an Agent and its Send API key. See [ZeptoMail's send-email API](https://www.zoho.com/cpaas/help/api/email-sending.html) for the current endpoint and regional setup.
+
+Set the API key as a Worker secret, set the verified sender address as a variable, and use the regional email endpoint provided by the Agent setup:
+
+```sh
+pnpm exec wrangler secret put ZEPTOMAIL_API_KEY
+pnpm exec wrangler secret put EMAIL_FROM
+pnpm exec wrangler secret put ZEPTOMAIL_API_URL
+pnpm run deploy
+```
+
+`EMAIL_FROM` and `ZEPTOMAIL_API_URL` are configuration values, not credentials. In email mode, only `AUTH_TEST_EMAILS` can request codes until the allow-list check is removed deliberately. In private-test mode, codes are returned only to allowed app clients; do not use this mode for public production.
+
 ## Deploy
 
 ```sh
 pnpm exec wrangler d1 create kwela        # once; copy the id into wrangler.jsonc
 pnpm run db:migrate:remote
 pnpm exec wrangler secret put OPENAI_API_KEY
+openssl rand -base64 48 | tr -d '\n' | pnpm exec wrangler secret put AUTH_SECRET
 pnpm run deploy
 ```
 

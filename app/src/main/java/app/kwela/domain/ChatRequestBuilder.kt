@@ -12,7 +12,13 @@ enum class OutgoingRole(val wireName: String) { USER("user"), ASSISTANT("assista
 
 data class OutgoingFile(val id: String, val name: String, val type: String, val dataUrl: String)
 
-data class OutgoingMessage(val id: String, val role: OutgoingRole, val content: String, val files: List<OutgoingFile> = emptyList())
+data class OutgoingMessage(
+    val id: String,
+    val role: OutgoingRole,
+    val content: String,
+    val files: List<OutgoingFile> = emptyList(),
+    val applicationJson: String? = null
+)
 
 /** Builds the JSON body the Kwela API expects for one chat turn. */
 object ChatRequestBuilder {
@@ -27,6 +33,7 @@ object ChatRequestBuilder {
     ): String {
         val window = messages.takeLast(if (savedProfileJson != null) MAX_MESSAGES - 1 else MAX_MESSAGES)
         val kept = keepNewestFiles(window, maxEncodedFileChars)
+        val newestDraft = kept.indexOfLast { it.role == OutgoingRole.ASSISTANT && it.applicationJson != null }
         val body = buildJsonObject {
             put("messages", buildJsonArray {
                 if (savedProfileJson != null) {
@@ -37,7 +44,7 @@ object ChatRequestBuilder {
                         put("candidateProfile", Json.parseToJsonElement(savedProfileJson))
                     })
                 }
-                kept.forEach { add(messageJson(it)) }
+                kept.forEachIndexed { index, message -> add(messageJson(message, includeDraft = index == newestDraft)) }
             })
         }
         return body.toString()
@@ -53,10 +60,11 @@ object ChatRequestBuilder {
         }
     }
 
-    private fun messageJson(message: OutgoingMessage): JsonObject = buildJsonObject {
+    private fun messageJson(message: OutgoingMessage, includeDraft: Boolean): JsonObject = buildJsonObject {
         put("id", message.id)
         put("role", message.role.wireName)
         put("content", message.content)
+        if (includeDraft && message.applicationJson != null) put("application", Json.parseToJsonElement(message.applicationJson))
         if (message.role == OutgoingRole.USER && message.files.isNotEmpty()) {
             put("files", JsonArray(message.files.map { file ->
                 buildJsonObject {

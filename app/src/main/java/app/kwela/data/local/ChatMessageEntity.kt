@@ -10,5 +10,6 @@ data class ChatMessageEntity(
     val content: String,
     val createdAt: Long,
     val attachmentName: String? = null,
-    val attachmentUri: String? = null
+    val attachmentUri: String? = null,
+    val applicationJson: String? = null
 )

@@ -4,12 +4,26 @@ import {
 } from "./lib/features/careergo/classicDocumentHtmlService.ts";
 import { careergoCoverLetterSchema } from "./lib/models/careergo/ICareergoCoverLetter.ts";
 import { careergoResumeSchema } from "./lib/models/careergo/ICareergoResume.ts";
+import type { IResolvedSession } from "./lib/models/services/IAuthStore.ts";
 import type { ICandidateProfileStoreService } from "./lib/models/services/ICandidateProfileStoreService.ts";
 
 /**
  * Everything the router needs from the outside world, so it can be tested without Cloudflare.
  */
 export interface IRouterDependencies {
+    /**
+     * Email sign-in and sessions.
+     */
+    auth: {
+        requestCode(email: string, sourceIp?: string): Promise<{ ok: true; testCode?: string } | { ok: false; status: number; message: string }>;
+        verify(
+            email: string,
+            code: string
+        ): Promise<{ ok: true; token: string; email: string } | { ok: false; status: number; message: string }>;
+        authenticate(token: string): Promise<IResolvedSession | null>;
+        signOut(token: string): Promise<void>;
+        deleteAccount(accountId: string, email: string): Promise<void>;
+    };
     /**
      * Runs one chat turn for the signed-in owner and returns the streamed reply.
      */
@@ -35,15 +49,21 @@ function json(body: unknown, status = 200): Response {
     return Response.json(body, { status });
 }
 
-/** Derives the stable owner id for a request from its install token.
+/** Reads the bearer token from a request.
  * @param request Incoming request.
- * @returns A SHA-256 hex id, or null when the token is missing or malformed.
+ * @returns The token, or null when it is missing or malformed.
  */
-async function ownerIdFrom(request: Request): Promise<string | null> {
-    const match = tokenPattern.exec(request.headers.get("authorization") ?? "");
-    if (!match) return null;
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(match[1]));
-    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+function bearerToken(request: Request): string | null {
+    return tokenPattern.exec(request.headers.get("authorization") ?? "")?.[1] ?? null;
+}
+
+/** Reads a JSON object body.
+ * @param request Incoming request.
+ * @returns The object, or null when the body is not a JSON object.
+ */
+async function readObject(request: Request): Promise<Record<string, unknown> | null> {
+    const body: unknown = await request.json().catch(() => null);
+    return body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
 }
 
 /** Answers a request that used a method the route does not accept.
@@ -97,13 +117,42 @@ async function exportPdf(request: Request, deps: IRouterDependencies): Promise<R
  * @returns A function that answers one request.
  */
 export function createRouter(deps: IRouterDependencies): (request: Request) => Promise<Response> {
+    /** Handles the unauthenticated sign-in routes. */
+    async function authRoute(request: Request, pathname: string): Promise<Response> {
+        if (pathname === "/auth/sign-out") {
+            if (request.method !== "POST") return methodNotAllowed(["POST"]);
+            const token = bearerToken(request);
+            if (!token) return json({ message: "Sign in again to continue." }, 401);
+            await deps.auth.signOut(token);
+            return json({ ok: true });
+        }
+        if (pathname !== "/auth/request-code" && pathname !== "/auth/verify") return json({ message: "Not found." }, 404);
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+        const body = await readObject(request);
+        if (pathname === "/auth/request-code") {
+            if (typeof body?.email !== "string") return json({ message: "Enter a valid email address." }, 400);
+            const result = await deps.auth.requestCode(body.email, request.headers.get("cf-connecting-ip") ?? undefined);
+            return result.ok
+                ? json({ ok: true, ...(result.testCode ? { testCode: result.testCode } : {}) })
+                : json({ message: result.message }, result.status);
+        }
+        if (typeof body?.email !== "string" || typeof body.code !== "string") {
+            return json({ message: "Enter the 6-digit code from your email." }, 400);
+        }
+        const result = await deps.auth.verify(body.email, body.code);
+        return result.ok ? json({ token: result.token, email: result.email }) : json({ message: result.message }, result.status);
+    }
+
     return async (request) => {
         const { pathname } = new URL(request.url);
         if (pathname === "/health") return json({ ok: true });
+        if (pathname.startsWith("/auth/")) return authRoute(request, pathname);
         if (!pathname.startsWith("/api/")) return json({ message: "Not found." }, 404);
 
-        const ownerId = await ownerIdFrom(request);
-        if (!ownerId) return json({ message: "Sign in again to continue." }, 401);
+        const token = bearerToken(request);
+        const session = token ? await deps.auth.authenticate(token) : null;
+        if (!session) return json({ message: "Sign in again to continue." }, 401);
+        const ownerId = session.accountId;
 
         switch (pathname) {
             case "/api/chat":
@@ -111,7 +160,7 @@ export function createRouter(deps: IRouterDependencies): (request: Request) => P
             case "/api/candidate-profile":
                 if (request.method === "GET") return json({ profile: await deps.profiles.get(ownerId) });
                 if (request.method === "PUT") {
-                    const body = (await request.json().catch(() => null)) as { profile?: unknown } | null;
+                    const body = await readObject(request);
                     const profile = careergoResumeSchema.safeParse(body?.profile);
                     if (!profile.success) return json({ message: "The CV profile could not be saved." }, 400);
                     await deps.profiles.save(ownerId, profile.data);
@@ -127,6 +176,7 @@ export function createRouter(deps: IRouterDependencies): (request: Request) => P
             case "/api/account":
                 if (request.method !== "DELETE") return methodNotAllowed(["DELETE"]);
                 await deps.profiles.delete(ownerId);
+                await deps.auth.deleteAccount(ownerId, session.email);
                 return json({ ok: true });
             default:
                 return json({ message: "Not found." }, 404);

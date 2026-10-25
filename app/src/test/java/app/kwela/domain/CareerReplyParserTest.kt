@@ -62,6 +62,15 @@ class CareerReplyParserTest {
     }
 
     @Test
+    fun keepsTheWholeApplicationPackSoItCanBeRevisedLater() {
+        val withPack = CareerReplyParser.parse(pack)!!
+        assertTrue(withPack.applicationJson!!.contains("Data Analyst"))
+        assertTrue(withPack.applicationJson!!.contains("Why us?"))
+
+        assertNull(CareerReplyParser.parse("""{"type":"message","message":"Send your CV."}""")!!.applicationJson)
+    }
+
+    @Test
     fun skipsTheAnswersDocumentWhenThereAreNoAnswers() {
         val withoutAnswers = pack.replace(""""applicationAnswers":[{"question":"Why us?","answer":"I like your work."}]""", """"applicationAnswers":[]""")
 

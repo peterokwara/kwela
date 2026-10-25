@@ -20,6 +20,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+
     kotlinOptions {
         jvmTarget = "17"
     }
@@ -43,10 +47,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val uploadStoreFile = providers.gradleProperty("kwela.uploadStoreFile").orNull
+    val uploadStorePassword = providers.gradleProperty("kwela.uploadStorePassword").orNull
+    val uploadKeyAlias = providers.gradleProperty("kwela.uploadKeyAlias").orNull
+    val uploadKeyPassword = providers.gradleProperty("kwela.uploadKeyPassword").orNull
+    val hasPlayUploadSigning = listOf(uploadStoreFile, uploadStorePassword, uploadKeyAlias, uploadKeyPassword).all { !it.isNullOrBlank() }
+
+    if (hasPlayUploadSigning) {
+        signingConfigs.create("playUpload") {
+            storeFile = file(uploadStoreFile!!)
+            storePassword = uploadStorePassword
+            keyAlias = uploadKeyAlias
+            keyPassword = uploadKeyPassword
+        }
+    }
+
     buildTypes {
         release {
-            // Local sideloading for this experiment. Replace with a private upload key before distribution.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasPlayUploadSigning) signingConfigs.getByName("playUpload") else signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

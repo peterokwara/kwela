@@ -14,6 +14,8 @@ import app.kwela.data.AttachmentReader
 import app.kwela.data.remote.ApiResult
 import app.kwela.domain.AttachmentPolicy
 import app.kwela.domain.CareerReplyParser
+import app.kwela.domain.SignInReplyParser
+import app.kwela.domain.SignInCodeRequestParser
 import app.kwela.domain.ChatRequestBuilder
 import app.kwela.domain.OutgoingMessage
 import app.kwela.domain.OutgoingRole
@@ -84,7 +86,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setScreen(screen: AppScreen) { mutableState.value = mutableState.value.copy(screen = screen) }
     fun setDraft(text: String) { mutableState.value = mutableState.value.copy(draftText = text) }
-    fun setPendingEmail(email: String) { mutableState.value = mutableState.value.copy(pendingEmail = email, loginError = null) }
+    fun setPendingEmail(email: String) { mutableState.value = mutableState.value.copy(pendingEmail = email, loginError = null, loginTestCode = null) }
 
     fun requestOtp() {
         val email = mutableState.value.pendingEmail.trim()
@@ -92,17 +94,47 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             mutableState.value = mutableState.value.copy(loginError = "Enter a valid email address.")
             return
         }
-        mutableState.value = mutableState.value.copy(otpRequested = true, loginError = null)
+        if (mutableState.value.isSigningIn) return
+        mutableState.value = mutableState.value.copy(isSigningIn = true, loginError = null)
+        viewModelScope.launch {
+            val result = api.requestCode(email)
+            val success = result as? ApiResult.Success
+            mutableState.value = mutableState.value.copy(
+                isSigningIn = false,
+                otpRequested = success != null,
+                loginTestCode = success?.let { SignInCodeRequestParser.parseTestCode(it.body) },
+                loginError = (result as? ApiResult.Failure)?.message,
+                message = if (result is ApiResult.Success && mutableState.value.otpRequested) "We sent a new code." else null
+            )
+        }
     }
 
     fun verifyOtp(code: String) {
-        if (code != "123456") {
-            mutableState.value = mutableState.value.copy(loginError = "That code isn’t right. Try again.")
-            return
-        }
+        if (mutableState.value.isSigningIn) return
+        mutableState.value = mutableState.value.copy(isSigningIn = true, loginError = null)
         viewModelScope.launch {
-            repository.signIn(mutableState.value.pendingEmail.trim())
-            mutableState.value = mutableState.value.copy(otpRequested = false, pendingEmail = "", screen = AppScreen.CHAT)
+            val result = api.verifyCode(mutableState.value.pendingEmail.trim(), code.trim())
+            val signedIn = (result as? ApiResult.Success)?.let { SignInReplyParser.parse(it.body) }
+            if (signedIn == null) {
+                mutableState.value = mutableState.value.copy(
+                    isSigningIn = false,
+                    loginError = (result as? ApiResult.Failure)?.message ?: "Kwela sent a reply the app couldn’t read. Please try again."
+                )
+                return@launch
+            }
+            taskJob?.cancel()
+            taskJob = null
+            val changedAccount = repository.signIn(signedIn.email, signedIn.token)
+            mutableState.value = mutableState.value.copy(
+                isSigningIn = false,
+                otpRequested = false,
+                loginTestCode = null,
+                pendingEmail = "",
+                screen = AppScreen.CHAT,
+                draftText = if (changedAccount) "" else mutableState.value.draftText,
+                pendingAttachment = if (changedAccount) null else mutableState.value.pendingAttachment,
+                replyError = null
+            )
             repository.pendingSharedText.first()?.let { shared ->
                 repository.savePendingSharedText(null)
                 setDraft(shared)
@@ -110,7 +142,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun backToEmail() { mutableState.value = mutableState.value.copy(otpRequested = false, loginError = null) }
+    fun backToEmail() { mutableState.value = mutableState.value.copy(otpRequested = false, loginTestCode = null, loginError = null) }
 
     fun sendDraft() {
         val current = mutableState.value
@@ -152,24 +184,31 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                 val uri = message.attachmentUri.takeIf { message.id == newestUserId }
                 val file = uri?.let { reader.read(message.id, Uri.parse(it)) }
                 if (uri != null && file == null) return@withContext null
-                OutgoingMessage(message.id, if (message.role == "USER") OutgoingRole.USER else OutgoingRole.ASSISTANT, message.content, listOfNotNull(file))
+                OutgoingMessage(message.id, if (message.role == "USER") OutgoingRole.USER else OutgoingRole.ASSISTANT, message.content, listOfNotNull(file), message.applicationJson)
             }
         } ?: return "Kwela couldn’t read your attached file. Attach it again."
-        val token = repository.deviceToken()
+        val token = repository.sessionToken() ?: return expireSession()
         val body = ChatRequestBuilder.build(history, repository.candidateProfile.first())
         val result = api.chat(token, body)
-        if (result is ApiResult.Failure) return result.message
+        if (result is ApiResult.Failure) return if (result.status == 401) expireSession() else result.message
         val reply = CareerReplyParser.parse((result as ApiResult.Success).body) ?: return "Kwela sent a reply the app couldn’t read. Please try again."
         val now = System.currentTimeMillis()
         reply.documents.forEachIndexed { index, document ->
             repository.saveDocument(SavedDocumentEntity(UUID.randomUUID().toString(), document.title, document.body, now + index))
         }
         val filesNote = if (reply.documents.isEmpty()) "" else "\n\nSaved to Files: " + reply.documents.joinToString(", ") { it.title } + "."
-        repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "ASSISTANT", reply.message + filesNote, now + reply.documents.size))
+        repository.saveMessage(ChatMessageEntity(UUID.randomUUID().toString(), "ASSISTANT", reply.message + filesNote, now + reply.documents.size, applicationJson = reply.applicationJson))
         reply.candidateProfileJson?.let { profile ->
             repository.saveCandidateProfile(profile)
             api.saveProfile(token, profile)
         }
+        return null
+    }
+
+    /** Ends a session the server no longer accepts and sends the person back to sign in. */
+    private suspend fun expireSession(): String? {
+        repository.signOut()
+        mutableState.value = mutableState.value.copy(message = "Please sign in again.", screen = AppScreen.CHAT)
         return null
     }
 
@@ -242,17 +281,22 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     fun setNotificationsEnabled(enabled: Boolean) { viewModelScope.launch { repository.setNotificationsEnabled(enabled) } }
 
     fun signOut() {
-        viewModelScope.launch { repository.signOut(); mutableState.value = mutableState.value.copy(screen = AppScreen.CHAT) }
+        viewModelScope.launch {
+            repository.sessionToken()?.let { api.signOut(it) }
+            repository.signOut()
+            mutableState.value = mutableState.value.copy(screen = AppScreen.CHAT)
+        }
     }
 
     fun deleteAccount() {
         viewModelScope.launch {
-            val remote = if (api.isConfigured) api.deleteAccount(repository.deviceToken()) else ApiResult.Success("")
+            val token = repository.sessionToken()
+            val remote = if (token != null) api.deleteAccount(token) else null
             taskJob?.cancel()
             repository.clearUserData()
             mutableState.value = KwelaUiState(
                 isRestoring = false,
-                message = (remote as? ApiResult.Failure)?.let { "Removed from this phone. Kwela couldn’t be reached to remove your saved CV profile, so try again later." }
+                message = if (remote is ApiResult.Failure) "Removed from this phone. Kwela couldn’t be reached to delete your account, so try again later or use the deletion page on our website." else null
             )
         }
     }

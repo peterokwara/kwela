@@ -8,7 +8,7 @@ import app.kwela.data.remote.KwelaApi
 
 class KwelaApplication : Application() {
     val database: KwelaDatabase by lazy {
-        Room.databaseBuilder(this, KwelaDatabase::class.java, "kwela.db").build()
+        Room.databaseBuilder(this, KwelaDatabase::class.java, "kwela.db").addMigrations(KwelaDatabase.MIGRATION_1_2).build()
     }
 
     val repository: KwelaRepository by lazy { KwelaRepository(this, database) }

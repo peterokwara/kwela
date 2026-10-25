@@ -13,6 +13,8 @@ data class KwelaUiState(
     val email: String? = null,
     val pendingEmail: String = "",
     val otpRequested: Boolean = false,
+    val loginTestCode: String? = null,
+    val isSigningIn: Boolean = false,
     val screen: AppScreen = AppScreen.CHAT,
     val draftText: String = "",
     val messages: List<ChatMessageEntity> = emptyList(),

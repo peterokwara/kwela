@@ -150,7 +150,7 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
         Surface(Modifier.fillMaxSize(), color = colors.surface) {
             when {
                 state.isRestoring -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                state.email == null -> LoginScreen(state.pendingEmail, state.otpRequested, state.loginError, vm::setPendingEmail, vm::requestOtp, vm::verifyOtp, vm::backToEmail)
+                state.email == null -> LoginScreen(state.pendingEmail, state.otpRequested, state.loginTestCode, state.isSigningIn, state.loginError, vm::setPendingEmail, vm::requestOtp, vm::verifyOtp, vm::backToEmail)
                 else -> {
                     var profileTab by rememberSaveable { mutableStateOf(ProfileTab.ACTIVITY) }
                     val reviewCount = state.tasks.count { it.taskStatus() == TaskStatus.WAITING_FOR_USER }
@@ -170,7 +170,7 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
 }
 
 @Composable
-private fun LoginScreen(email: String, otp: Boolean, error: String?, onEmail: (String) -> Unit, request: () -> Unit, verify: (String) -> Unit, back: () -> Unit) {
+private fun LoginScreen(email: String, otp: Boolean, testCode: String?, working: Boolean, error: String?, onEmail: (String) -> Unit, request: () -> Unit, verify: (String) -> Unit, back: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     var code by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(horizontal = 28.dp), verticalArrangement = Arrangement.Center) {
@@ -178,17 +178,25 @@ private fun LoginScreen(email: String, otp: Boolean, error: String?, onEmail: (S
         Spacer(Modifier.height(24.dp))
         Text(if (otp) "Check your email" else "Welcome to Kwela", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = colors.onSurface)
         Spacer(Modifier.height(8.dp))
-        Text(if (otp) "Enter the 6-digit code to continue." else "A little help with your next application.", color = colors.onSurfaceVariant)
+        Text(
+            if (otp && testCode != null) "Private test code: $testCode. Enter it to continue."
+            else if (otp) "We sent a 6-digit code to $email. Enter it to continue."
+            else "A little help with your next application.",
+            color = colors.onSurfaceVariant
+        )
         Spacer(Modifier.height(28.dp))
         if (!otp) {
             OutlinedTextField(email, onEmail, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
             Spacer(Modifier.height(16.dp))
-            Button(onClick = request, Modifier.fillMaxWidth().height(52.dp), shape = CircleShape) { Text("Continue") }
+            Button(onClick = request, Modifier.fillMaxWidth().height(52.dp), enabled = !working, shape = CircleShape) { Text(if (working) "Sending code…" else "Continue") }
         } else {
             OutlinedTextField(code, { if (it.length <= 6 && it.all(Char::isDigit)) code = it }, Modifier.fillMaxWidth(), label = { Text("6-digit code") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
             Spacer(Modifier.height(16.dp))
-            Button(onClick = { verify(code) }, Modifier.fillMaxWidth().height(52.dp), shape = CircleShape) { Text("Sign in") }
-            TextButton(onClick = back) { Text("Use a different email") }
+            Button(onClick = { verify(code) }, Modifier.fillMaxWidth().height(52.dp), enabled = !working && code.length == 6, shape = CircleShape) { Text(if (working) "Checking…" else "Sign in") }
+            Row {
+                TextButton(onClick = back, enabled = !working) { Text("Use a different email") }
+                TextButton(onClick = request, enabled = !working) { Text("Send a new code") }
+            }
         }
         if (error != null) { Spacer(Modifier.height(8.dp)); Text(error, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(28.dp))

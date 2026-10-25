@@ -8,6 +8,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -21,7 +23,7 @@ import okhttp3.Response
 
 sealed interface ApiResult {
     data class Success(val body: String) : ApiResult
-    data class Failure(val message: String) : ApiResult
+    data class Failure(val message: String, val status: Int? = null) : ApiResult
 }
 
 /** Talks to the Kwela API Worker. An empty [baseUrl] means no backend is configured for this build. */
@@ -35,6 +37,14 @@ class KwelaApi(
 ) {
     val isConfigured: Boolean get() = baseUrl.isNotBlank()
 
+    suspend fun requestCode(email: String): ApiResult =
+        call(null, "POST", "/auth/request-code", buildJsonObject { put("email", email) }.toString())
+
+    suspend fun verifyCode(email: String, code: String): ApiResult =
+        call(null, "POST", "/auth/verify", buildJsonObject { put("email", email); put("code", code) }.toString())
+
+    suspend fun signOut(token: String): ApiResult = call(token, "POST", "/auth/sign-out", "{}")
+
     suspend fun chat(token: String, requestJson: String): ApiResult = call(token, "POST", "/api/chat", requestJson)
 
     suspend fun saveProfile(token: String, profileJson: String): ApiResult =
@@ -42,18 +52,18 @@ class KwelaApi(
 
     suspend fun deleteAccount(token: String): ApiResult = call(token, "DELETE", "/api/account", null)
 
-    private suspend fun call(token: String, method: String, path: String, jsonBody: String?): ApiResult {
+    private suspend fun call(token: String?, method: String, path: String, jsonBody: String?): ApiResult {
         if (!isConfigured) return ApiResult.Failure("Kwela’s assistant isn’t available in this build.")
         val request = Request.Builder()
             .url(baseUrl.trimEnd('/') + path)
-            .header("authorization", "Bearer $token")
+            .apply { if (token != null) header("authorization", "Bearer $token") }
             .method(method, jsonBody?.toRequestBody("application/json".toMediaType()))
             .build()
         return try {
             client.newCall(request).await().use { response ->
                 val body = withContext(Dispatchers.IO) { response.body?.string().orEmpty() }
                 if (response.isSuccessful) ApiResult.Success(body)
-                else ApiResult.Failure(ApiMessages.forStatus(response.code, serverMessage(body)))
+                else ApiResult.Failure(ApiMessages.forStatus(response.code, serverMessage(body)), response.code)
             }
         } catch (_: IOException) {
             ApiResult.Failure(ApiMessages.offline())

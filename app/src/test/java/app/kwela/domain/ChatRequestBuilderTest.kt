@@ -69,4 +69,22 @@ class ChatRequestBuilderTest {
         assertTrue(sent[1].jsonObject.containsKey("files"))
         assertEquals("old", sent[0].jsonObject["content"]!!.jsonPrimitive.content)
     }
+
+    @Test
+    fun sendsOnlyTheNewestApplicationDraftBackSoRevisionsBuildOnIt() {
+        val history = listOf(
+            OutgoingMessage("1", OutgoingRole.USER, "Make me a CV"),
+            OutgoingMessage("2", OutgoingRole.ASSISTANT, "First draft", applicationJson = """{"job":{"title":"Old"}}"""),
+            OutgoingMessage("3", OutgoingRole.USER, "Add leadership"),
+            OutgoingMessage("4", OutgoingRole.ASSISTANT, "Second draft", applicationJson = """{"job":{"title":"New"}}"""),
+            OutgoingMessage("5", OutgoingRole.USER, "Move skills up")
+        )
+
+        val sent = messages(ChatRequestBuilder.build(history, null))
+
+        assertFalse(sent[1].jsonObject.containsKey("application"))
+        assertEquals("New", sent[3].jsonObject["application"]!!.jsonObject["job"]!!.jsonObject["title"]!!.jsonPrimitive.content)
+        assertFalse(sent[0].jsonObject.containsKey("application"))
+        assertFalse(sent[4].jsonObject.containsKey("application"))
+    }
 }

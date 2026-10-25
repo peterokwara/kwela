@@ -2,7 +2,6 @@ package app.kwela
 
 import android.content.Intent
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -12,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,15 +24,17 @@ class MainActivityFlowTest {
     @Test
     fun demoOtpUnlocksChatAndBottomNavigationWorks() {
         compose.onNodeWithText("Welcome to Kwela").assertIsDisplayed()
+        compose.onNode(hasText("Email address", substring = true)).performTextInput("not-an-email")
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Enter a valid email address.").assertIsDisplayed()
+
         compose.activity.receiveSharedIntent(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, "https://example.test/pending-internship")
         })
-        compose.onNode(hasText("Email address", substring = true)).performTextInput("tester@example.test")
-        compose.onNodeWithText("Continue").performClick()
-        compose.onNodeWithText("Enter the 6-digit code to continue.").assertIsDisplayed()
-        compose.onNode(hasText("6-digit code", substring = true) and hasSetTextAction()).performTextInput("123456")
-        compose.onNodeWithText("Sign in").performClick()
+        // Real sign-in needs the network and an inbox, so sign in through storage here.
+        val app = compose.activity.application as app.kwela.KwelaApplication
+        runBlocking { app.repository.signIn("tester@example.test", "test-session-token") }
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("Your next opportunity starts here.").fetchSemanticsNodes().isNotEmpty()
         }

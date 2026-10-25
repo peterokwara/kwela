@@ -10,7 +10,7 @@ import kotlinx.serialization.json.booleanOrNull
 
 data class ReplyDocument(val title: String, val body: String)
 
-data class CareerReply(val message: String, val documents: List<ReplyDocument>, val candidateProfileJson: String?)
+data class CareerReply(val message: String, val documents: List<ReplyDocument>, val candidateProfileJson: String?, val applicationJson: String? = null)
 
 /** Reads the JSON reply from the Kwela API into chat text and readable documents. */
 object CareerReplyParser {
@@ -19,7 +19,7 @@ object CareerReplyParser {
         val message = root.text("message") ?: return null
         val profile = root["candidateProfile"]?.takeIf { it !is JsonNull }?.toString()
         val pack = root["applicationPack"] as? JsonObject
-        return CareerReply(message, if (pack != null) documentsFrom(pack) else emptyList(), profile)
+        return CareerReply(message, if (pack != null) documentsFrom(pack) else emptyList(), profile, pack?.toString())
     }
 
     private fun documentsFrom(pack: JsonObject): List<ReplyDocument> {
