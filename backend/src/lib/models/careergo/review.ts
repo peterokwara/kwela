@@ -31,7 +31,13 @@ const MAX_FINDINGS = 3;
 const MIN_LINE_LENGTH = 25;
 
 const dutyOpening = /^(responsible for|duties (included|include)|tasked with|worked on|in charge of)\b/i;
+/**
+ * Lines longer than this already carry plenty of detail, so a "how many?" question would feel silly.
+ */
+const MAX_QUESTION_LINE_LENGTH = 110;
+
 const hasDigit = /\d/;
+const strategic = /\b(strategy|strategic|roadmap|vision|architecture|end-to-end|end to end|oversaw|owned)\b/i;
 const saysHowMuch = /\b(dozens?|hundreds?|thousands?|several|a few|many|daily|weekly|monthly|yearly|every|each|nightly|hourly)\b/i;
 
 /** Reviews the achievement lines of a CV with fixed rules, with no AI involved.
@@ -41,7 +47,9 @@ const saysHowMuch = /\b(dozens?|hundreds?|thousands?|several|a few|many|daily|we
 export function reviewResume(resume: { employments?: { achievements?: string[] }[] }): IReviewFinding[] {
     const lines = (resume.employments ?? []).flatMap((job) => (job.achievements ?? []).map((line) => line.trim()).filter(Boolean));
     const duties = lines.filter((line) => dutyOpening.test(line) && !hasDigit.test(line));
-    const quiet = lines.filter((line) => !dutyOpening.test(line) && !hasDigit.test(line) && !saysHowMuch.test(line) && line.length >= MIN_LINE_LENGTH);
+    const quiet = lines.filter(
+        (line) => !dutyOpening.test(line) && !hasDigit.test(line) && !saysHowMuch.test(line) && !strategic.test(line) && line.length >= MIN_LINE_LENGTH && line.length <= MAX_QUESTION_LINE_LENGTH
+    );
     return [
         ...duties.map(
             (line): IReviewFinding => ({

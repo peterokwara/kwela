@@ -59,3 +59,12 @@ test("a line that already says how much or how often is not asked about again", 
     ];
     assert.deepEqual(reviewResume(cv(answered)), []);
 });
+
+test("a long, detailed line is not asked how many, because the size question makes no sense for it", () => {
+    const line = "Owned end-to-end SaaS delivery across architecture, implementation, deployment, monitoring, analytics and product operations for the whole platform";
+    assert.deepEqual(reviewResume(cv([line])), []);
+});
+
+test("strategy and leadership lines are not asked how many either", () => {
+    assert.deepEqual(reviewResume(cv(["Set the engineering strategy and roadmap for the product team"])), []);
+});

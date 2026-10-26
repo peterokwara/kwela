@@ -83,6 +83,15 @@ export const scenarios = [
         turns: ["I want better pay", "What pay range should I ask for as a Deputy CTO at a tech startup in Nairobi? Please search online."]
     },
     {
+        name: "Any luck follow-up",
+        turns: [
+            "I saw a job I want",
+            "Peter Okwara, Nairobi, peter@example.test, 0700 000 000. CTO at Careergo since Jan 2023, led a team of 3, built SaaS products in TypeScript and Cloudflare. BSc Computer Science 2018. Applying for Deputy CTO at Tiko in Nairobi. Please prepare my CV and cover letter.",
+            "also change my title to Co-founder and CTO",
+            "any luck?"
+        ]
+    },
+    {
         name: "Teacher with a long CV",
         turns: [
             "I want better pay",
