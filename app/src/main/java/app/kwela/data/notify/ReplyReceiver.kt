@@ -30,7 +30,7 @@ class ReplyReceiver : BroadcastReceiver() {
                         val messageId = UUID.randomUUID().toString()
                         app.repository.saveMessage(ChatMessageEntity(messageId, "USER", text, app.repository.nextMessageTimestamp()))
                         ReplyScheduler.enqueue(context, messageId, ReplyPacing.isSlow(text, hasAttachment = false))
-                        notifications.show(emptyList(), youSaid = text)
+                        notifications.show(emptyList(), youSaid = text, alert = false)
                     } finally {
                         pending.finish()
                     }

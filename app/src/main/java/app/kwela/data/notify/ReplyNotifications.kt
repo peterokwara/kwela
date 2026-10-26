@@ -3,6 +3,9 @@ package app.kwela.data.notify
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ContentResolver
+import android.media.AudioAttributes
+import android.net.Uri
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -23,17 +26,27 @@ import app.kwela.domain.NotificationText
 class ReplyNotifications(private val context: Context) {
     fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        // A channel's sound cannot be changed once it exists, so the first version, which had no sound of its own, is replaced.
+        manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
+        val sound = Uri.parse("${ContentResolver.SCHEME_ANDROID_RESOURCE}://${context.packageName}/${R.raw.kwela_message}")
         val channel = NotificationChannel(CHANNEL_ID, "Replies", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Kwela's replies when you are away from the app."
+            setSound(sound, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 120, 80, 120)
         }
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        manager.createNotificationChannel(channel)
     }
 
     /** False when the person, or Android, has switched Kwela's notifications off. */
     fun canPost(): Boolean = NotificationManagerCompat.from(context).areNotificationsEnabled()
 
-    /** Shows Kwela's latest lines. [youSaid] is what the person just typed in the notification, so it can show that it was received. */
-    fun show(lines: List<String>, youSaid: String? = null) {
+    /**
+     * Shows Kwela's latest lines. [youSaid] is what the person just typed in the notification, so it can show that it was received.
+     * A new reply makes a sound, every time. [alert] is false only for the quiet "got your reply" update.
+     */
+    fun show(lines: List<String>, youSaid: String? = null, alert: Boolean = true) {
         ensureChannel()
         val me = Person.Builder().setName("You").build()
         val kwela = Person.Builder().setName("Kwela").setIcon(avatar()).setImportant(true).build()
@@ -59,7 +72,7 @@ class ReplyNotifications(private val context: Context) {
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setContentIntent(open)
             .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
+            .setOnlyAlertOnce(!alert)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(publicVersion)
             .addAction(reply)
@@ -92,7 +105,8 @@ class ReplyNotifications(private val context: Context) {
     }
 
     companion object {
-        const val CHANNEL_ID = "kwela_replies"
+        const val CHANNEL_ID = "kwela_replies_v2"
+        private const val LEGACY_CHANNEL_ID = "kwela_replies"
         const val NOTIFICATION_ID = 2001
         const val KEY_REPLY = "reply_text"
         const val ACTION_REPLY = "app.kwela.action.REPLY"
