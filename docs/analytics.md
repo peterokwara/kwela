@@ -10,7 +10,8 @@ Product analytics run on PostHog, in its own project **Kwela** (US cloud, projec
 - **Careful distinct ids.** The id is the server's opaque account id (a keyed hash of the email for newer accounts, a random id for older ones). It is the same on the phone and the server, and it is never an email. The server returns it at sign-in as `analyticsId`.
 - **Internal users are tagged.** Every event carries `is_internal_user`. It is true for the team and testers (`AUTH_TEST_EMAILS`) and for debug builds. The project setting "Filter out internal and test users" excludes `is_internal_user = true` and is on by default.
 - **No content.** Events never carry a CV, message, file name, name or email.
-- **The person can opt out.** Settings has a "Usage statistics" switch. It is on by default.
+- **The person can opt out.** Settings has a "Usage statistics" switch, on by default. Turning it off stops the phone's SDK at once and tells the server (`PUT /api/analytics`), which records it in `analytics_opt_outs` and stops sending that account's server events. The phone starts with analytics off until it has read the saved choice, so an opt-out holds from the first event.
+- **Deletion.** Deleting an account sends `account:user_delete`. PostHog's capture key cannot erase history, so earlier events stay under the random account id until erased on request from the PostHog project. The privacy page says this.
 
 ## Events
 

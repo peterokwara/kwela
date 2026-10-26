@@ -89,3 +89,45 @@ test("internal accounts are found by their real stored ids, including older rand
     assert.deepEqual(queries[0].emails, ["tester@example.test", "other@example.test"]);
     assert.equal(typeof analyticsFromEnv(env).capture, "function");
 });
+
+test("an account that opted out is never sent to PostHog", async () => {
+    const { calls, fetcher } = recorder();
+    const analytics = createAnalytics({ apiKey: "k", host: HOST, fetcher, isOptedOut: async (id) => id === "private-person" });
+    await analytics.capture("private-person", "chat:application_generate");
+    await analytics.capture("other-person", "chat:application_generate");
+    assert.deepEqual(calls.map((call) => call.body.distinct_id), ["other-person"]);
+});
+
+test("if the opt-out lookup fails, nothing is sent rather than risk ignoring a person's choice", async () => {
+    const { calls, fetcher } = recorder();
+    const analytics = createAnalytics({ apiKey: "k", host: HOST, fetcher, isOptedOut: async () => { throw new Error("db down"); } });
+    await analytics.capture("someone", "chat:run_fail");
+    assert.equal(calls.length, 0);
+});
+
+test("opt-outs are read from the database, remembered briefly, and can be changed", async () => {
+    const { optOutChecker, setAnalyticsOptOut } = await import("../src/lib/server/services/analyticsFactory.ts");
+    const rows = new Set();
+    let reads = 0;
+    const DB = {
+        prepare(query) {
+            return {
+                bind(...values) {
+                    return {
+                        async first() { reads += 1; return rows.has(values[0]) ? { account_id: values[0] } : null; },
+                        async run() { if (/^INSERT/i.test(query)) rows.add(values[0]); else rows.delete(values[0]); }
+                    };
+                }
+            };
+        }
+    };
+    const isOptedOut = optOutChecker(DB, () => 1_000);
+    assert.equal(await isOptedOut("a"), false);
+    assert.equal(await isOptedOut("a"), false);
+    assert.equal(reads, 1, "remembered for a short while");
+    await setAnalyticsOptOut(DB, "a", false, 1_000); // statistics switched off
+    assert.equal(rows.has("a"), true);
+    assert.equal(await optOutChecker(DB, () => 1_000)("a"), true);
+    await setAnalyticsOptOut(DB, "a", true, 1_000); // switched back on
+    assert.equal(rows.has("a"), false);
+});

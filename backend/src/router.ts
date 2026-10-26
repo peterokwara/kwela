@@ -54,6 +54,10 @@ export interface IRouterDependencies {
      * Records a product event for the signed-in account. Never throws. Omit to record nothing.
      */
     track?(ownerId: string, event: string, properties?: Record<string, unknown>): void;
+    /**
+     * Saves whether the account allows usage statistics. Off stops every event for it, from the server and the phone.
+     */
+    setAnalyticsEnabled?(ownerId: string, enabled: boolean): Promise<void>;
 }
 
 const tokenPattern = /^Bearer ([A-Za-z0-9_-]{32,128})$/;
@@ -212,6 +216,13 @@ export function createRouter(deps: IRouterDependencies): (request: Request) => P
                 return methodNotAllowed(["GET", "PUT", "DELETE"]);
             case "/api/documents/pdf":
                 return request.method === "POST" ? exportPdf(request, deps, ownerId) : methodNotAllowed(["POST"]);
+            case "/api/analytics": {
+                if (request.method !== "PUT") return methodNotAllowed(["PUT"]);
+                const body = await readObject(request);
+                if (typeof body?.enabled !== "boolean") return json({ message: "Choose on or off." }, 400);
+                await deps.setAnalyticsEnabled?.(ownerId, body.enabled);
+                return json({ ok: true });
+            }
             case "/api/account":
                 if (request.method !== "DELETE") return methodNotAllowed(["DELETE"]);
                 await deps.chatRuns?.deleteOwner(ownerId);

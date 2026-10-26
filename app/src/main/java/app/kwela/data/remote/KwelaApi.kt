@@ -40,6 +40,10 @@ class KwelaApi(
     suspend fun requestCode(email: String): ApiResult =
         call(null, "POST", "/auth/request-code", buildJsonObject { put("email", email) }.toString())
 
+    /** Tells the server whether this account allows usage statistics. Off stops the server's events for it too. */
+    suspend fun setAnalytics(token: String, enabled: Boolean): ApiResult =
+        call(token, "PUT", "/api/analytics", buildJsonObject { put("enabled", enabled) }.toString())
+
     /** Signs in with the ID token Google's sign-in sheet gave the phone. */
     suspend fun googleSignIn(idToken: String): ApiResult =
         call(null, "POST", "/auth/google", buildJsonObject { put("idToken", idToken) }.toString())

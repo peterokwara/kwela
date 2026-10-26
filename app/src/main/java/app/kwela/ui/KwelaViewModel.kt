@@ -213,6 +213,8 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         val draftBeforeSignIn = mutableState.value.draftText
         val changedAccount = repository.signIn(signedIn.email, signedIn.token, signedIn.name, signedIn.analyticsId, signedIn.analyticsInternal)
         signedIn.analyticsId?.let { analytics.identify(it, signedIn.analyticsInternal || BuildConfig.DEBUG) }
+        // A person who switched statistics off on this phone stays switched off on the server, on any sign-in.
+        if (!repository.analyticsEnabled.first()) api.setAnalytics(signedIn.token, false)
         mutableState.value = mutableState.value.copy(
             isSigningIn = false,
             otpRequested = false,
@@ -240,8 +242,6 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Sends a message to the writer without touching the person's current draft. */
     private fun sendText(text: String, attachment: PendingAttachment? = null) {
-        // Only the fact that a message was sent is counted, never what it said.
-        analytics.track(AnalyticsEvents.messageSend, mapOf("has_attachment" to (attachment != null)))
         val slow = ReplyPacing.isSlow(text, attachment != null)
         mutableState.value = mutableState.value.copy(pendingReview = null, downloadGate = null, isReplying = true, replyIsSlow = slow)
         viewModelScope.launch {
@@ -250,6 +250,8 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                 repository.savePendingReview(null)
                 val messageId = UUID.randomUUID().toString()
                 repository.saveMessage(ChatMessageEntity(messageId, "USER", text, repository.nextMessageTimestamp(), attachment?.name, attachment?.uri))
+                // Only the fact that a message was sent is counted, never what it said.
+                analytics.track(AnalyticsEvents.messageSend, mapOf("has_attachment" to (attachment != null)))
                 ReplyScheduler.enqueue(getApplication(), messageId, slow)
             }
         }
@@ -451,7 +453,11 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     /** The Settings switch for usage statistics. Turning it off stops every event from this phone at once. */
     fun setAnalyticsEnabled(enabled: Boolean) {
         analytics.setEnabled(enabled)
-        viewModelScope.launch { repository.setAnalyticsEnabled(enabled) }
+        viewModelScope.launch {
+            repository.setAnalyticsEnabled(enabled)
+            // The server sends events too, so it needs to know. This is best effort: the phone's own switch already took effect.
+            repository.sessionToken()?.let { api.setAnalytics(it, enabled) }
+        }
     }
 
     fun setNotificationsEnabled(enabled: Boolean) { viewModelScope.launch { repository.setNotificationsEnabled(enabled) } }

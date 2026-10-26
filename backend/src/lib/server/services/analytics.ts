@@ -25,6 +25,10 @@ export interface IAnalyticsOptions {
      */
     internalIds?: () => Promise<ReadonlySet<string>>;
     /**
+     * Says whether a person has switched usage statistics off. Their events are never sent. If this cannot answer, nothing is sent.
+     */
+    isOptedOut?: (distinctId: string) => Promise<boolean>;
+    /**
      * HTTP client. Swappable so tests need no network.
      */
     fetcher?: typeof fetch;
@@ -49,6 +53,7 @@ export function createAnalytics(options: IAnalyticsOptions): IAnalytics {
         async capture(distinctId, event, properties = {}) {
             if (!apiKey) return;
             try {
+                if (options.isOptedOut && (await options.isOptedOut(distinctId))) return;
                 const internal = options.internalIds ? (await options.internalIds()).has(distinctId) : false;
                 const response = await fetcher(`${host}/i/v0/e/`, {
                     method: "POST",

@@ -67,6 +67,10 @@ function fakes() {
             calls.renders.push(ownerId);
             return calls.renderDecision;
         },
+        async setAnalyticsEnabled(ownerId, enabled) {
+            calls.analyticsChoice = calls.analyticsChoice ?? [];
+            calls.analyticsChoice.push({ ownerId, enabled });
+        },
         track(ownerId, event, properties) {
             calls.tracked = calls.tracked ?? [];
             calls.tracked.push({ ownerId, event, properties });
@@ -264,4 +268,19 @@ test("a refused or failed render is not recorded as a render", async () => {
     calls.renderDecision = { allowed: false, status: 429, message: "Slow down a little." };
     await router(request("/api/documents/pdf", { method: "POST", body: { type: "cover_letter", document: goodLetter } }));
     assert.equal(calls.tracked, undefined);
+});
+
+test("turning usage statistics off or on is saved for the signed-in account", async () => {
+    const { router, calls } = fakes();
+    assert.equal((await router(request("/api/analytics", { method: "PUT", body: { enabled: false } }))).status, 200);
+    assert.equal((await router(request("/api/analytics", { method: "PUT", body: { enabled: true } }))).status, 200);
+    assert.deepEqual(calls.analyticsChoice, [{ ownerId: "acct-a", enabled: false }, { ownerId: "acct-a", enabled: true }]);
+});
+
+test("the usage statistics choice needs a sign-in and a real true or false", async () => {
+    const { router, calls } = fakes();
+    assert.equal((await router(request("/api/analytics", { method: "PUT", auth: null, body: { enabled: false } }))).status, 401);
+    assert.equal((await router(request("/api/analytics", { method: "PUT", body: { enabled: "no" } }))).status, 400);
+    assert.equal((await router(request("/api/analytics"))).status, 405);
+    assert.equal(calls.analyticsChoice, undefined);
 });

@@ -26,6 +26,13 @@ class AnalyticsEventsTest {
     }
 
     @Test
+    fun nothingIsSentUntilTheSavedChoiceHasBeenRead() {
+        val sink = RecordingSink()
+        Analytics(sink).track(AnalyticsEvents.messageSend)
+        assertTrue(sink.events.isEmpty())
+    }
+
+    @Test
     fun theFacadeSendsNothingWhileAnalyticsIsOff() {
         val sink = RecordingSink()
         val analytics = Analytics(sink)
@@ -46,11 +53,12 @@ class AnalyticsEventsTest {
             override fun reset() = error("posthog down")
             override fun setOptedOut(optedOut: Boolean) = error("posthog down")
         }, onProblem = { problems += it })
+        analytics.setEnabled(true)
         analytics.track(AnalyticsEvents.messageSend)
         analytics.identify("id", internal = false)
         analytics.reset()
         analytics.setEnabled(false)
-        assertEquals(4, problems.size)
+        assertEquals(5, problems.size)
     }
 
     @Test
@@ -66,6 +74,7 @@ class AnalyticsEventsTest {
     fun internalAccountsTagEveryLaterEventToo() {
         val sink = RecordingSink()
         val analytics = Analytics(sink)
+        analytics.setEnabled(true)
         analytics.identify("abc123", internal = true)
         analytics.track(AnalyticsEvents.messageSend)
         assertEquals(true, sink.events.single().second["is_internal_user"])

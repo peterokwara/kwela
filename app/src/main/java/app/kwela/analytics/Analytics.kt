@@ -20,7 +20,8 @@ class Analytics(
     private val internalByDefault: Boolean = false,
     private val onProblem: (Exception) -> Unit = { Log.w("KwelaAnalytics", "Analytics failed, ignoring it", it) }
 ) {
-    @Volatile private var enabled = true
+    // Off until the person's saved choice has been read, so an opt-out is honoured from the very first event.
+    @Volatile private var enabled = false
     @Volatile private var internal = internalByDefault
 
     fun track(event: String, properties: Map<String, Any> = emptyMap()) {

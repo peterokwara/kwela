@@ -74,10 +74,10 @@ fun LoginScreen(
     var googleSheetOpen by remember { mutableStateOf(false) }
     val requestCode = { focus.clearFocus(); request() }
     val signInWithGoogle = {
-        analytics.track(AnalyticsEvents.googleButtonClick)
         val activity = context as? Activity
         if (activity != null && !working && !googleSheetOpen) scope.launch {
             googleSheetOpen = true
+            analytics.track(AnalyticsEvents.googleButtonClick)
             try {
                 when (val result = GoogleSignIn.requestToken(activity)) {
                     is GoogleSignInResult.Token -> onGoogleToken(result.idToken)

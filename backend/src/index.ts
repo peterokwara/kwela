@@ -1,6 +1,6 @@
 import { createRouter } from "./router.ts";
 import { createAuthService } from "./lib/server/services/authService.ts";
-import { analyticsFromEnv, internalAccountIds } from "./lib/server/services/analyticsFactory.ts";
+import { analyticsFromEnv, internalAccountIds, setAnalyticsOptOut, type IAnalyticsDatabase } from "./lib/server/services/analyticsFactory.ts";
 import { createGoogleTokenVerifier } from "./lib/server/services/googleIdToken.ts";
 import { D1AuthStoreService, type AuthDatabase } from "./lib/server/services/d1AuthStoreService.ts";
 import { AllowlistedTestOtpMailer, CloudflareOtpMailer, LogOtpMailer, SelectingOtpMailer, ZeptoMailOtpMailer, type IEmailSender } from "./lib/server/services/otpMailers.ts";
@@ -126,6 +126,7 @@ export default {
               ? new CloudflareOtpMailer(env.EMAIL, env.EMAIL_FROM)
               : null;
         const analytics = analyticsFromEnv(env);
+        const analyticsDatabase = env.DB as unknown as IAnalyticsDatabase;
         const auth = createAuthService({
             store: new D1AuthStoreService(env.DB as unknown as AuthDatabase),
             mailer: testCode
@@ -151,6 +152,7 @@ export default {
             },
             profiles: new D1CandidateProfileStoreService(env.DB as unknown as CandidateProfileDatabase),
             chatRuns: new D1ChatRunService(env.DB, env.RUN_INPUTS, env.CHAT_RUNS),
+            setAnalyticsEnabled: (ownerId, enabled) => setAnalyticsOptOut(analyticsDatabase, ownerId, enabled),
             track: (ownerId, event, properties) => context.waitUntil(analytics.capture(ownerId, event, properties)),
             reserveRender: (ownerId) =>
                 new D1UsageLimitService(env.DB as unknown as UsageDatabase, readUsageConfig(env).limits).reserveRender(ownerId),
