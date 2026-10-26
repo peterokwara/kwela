@@ -83,6 +83,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import app.kwela.ui.PendingAttachment
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import app.kwela.domain.DisplayName
 import app.kwela.domain.ActivityTimeline
 import app.kwela.domain.ChatTimeHeader
 import app.kwela.domain.DocumentSummary
@@ -110,6 +111,9 @@ import app.kwela.data.local.SavedDocumentEntity
 import app.kwela.ui.AppScreen
 import app.kwela.ui.KwelaViewModel
 import app.kwela.ui.startingMoments
+import app.kwela.ui.ProfileSheet
+import app.kwela.ui.SettingsScreen
+import app.kwela.ui.ProfileAvatar
 import app.kwela.ui.ArtifactCard
 import app.kwela.ui.DocumentActions
 import app.kwela.ui.DocumentPreviewScreen
@@ -190,9 +194,7 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                 state.isRestoring -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
                 state.email == null -> LoginScreen(state.pendingEmail, state.otpRequested, state.loginTestCode, state.isSigningIn, state.loginError, vm::setPendingEmail, vm::requestOtp, vm::verifyOtp, vm::backToEmail)
                 else -> {
-                    var profileTab by rememberSaveable { mutableStateOf(ProfileTab.ACTIVITY) }
-                    val reviewCount = state.tasks.count { it.taskStatus() == TaskStatus.WAITING_FOR_USER }
-                    val openProfile = { profileTab = ProfileTab.ACTIVITY; vm.setScreen(AppScreen.PROFILE) }
+                    var showProfile by rememberSaveable { mutableStateOf(false) }
                     var previewId by rememberSaveable { mutableStateOf<String?>(null) }
                     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
                     // Ask once, at the moment it makes sense: the first time Kwela needs a minute and the person might wander off.
@@ -215,13 +217,14 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                     if (previewDocument != null) {
                         DocumentPreviewScreen(previewDocument, docActions, changeRequest = { line, note -> previewId = null; vm.sendChangeRequest(previewDocument.title, line, note) }) { previewId = null }
                     } else if (state.screen == AppScreen.PROFILE) {
-                        ProfileScreen(state, profileTab, { profileTab = it }, { vm.setScreen(AppScreen.CHAT) }, vm::review, vm::setNotificationsEnabled, vm::setThemeMode, vm::signOut, vm::deleteAccount, vm::startTestTask)
-                    } else MainShell(state.screen, vm::setScreen, reviewCount, openProfile) {
+                        SettingsScreen(state.notificationsEnabled, vm::setNotificationsEnabled, state.themeMode, vm::setThemeMode) { vm.setScreen(AppScreen.CHAT) }
+                    } else MainShell(state.screen, vm::setScreen, state.email.orEmpty(), null, { showProfile = true }) {
                         when (state.screen) {
                             AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile, state.pendingAttachment, state.isReplying, state.replyIsSlow, vm::removeAttachment, vm::retryReply, state.failedReplies, state.pendingMessages, vm::resendMessage, vm::deleteMessage, state.documents, docActions, state.pendingReview, state.downloadGate, vm::answerReview, vm::addMissingDetails, vm::downloadAnyway)
                             AppScreen.FILES -> FilesScreen(state.documents, docActions)
                         }
                     }
+                    if (showProfile && previewDocument == null) ProfileSheet(state.email.orEmpty(), null, openSettings = { vm.setScreen(AppScreen.PROFILE) }, signOut = vm::signOut, deleteAccount = vm::deleteAccount) { showProfile = false }
                 }
             }
         }
@@ -280,37 +283,31 @@ private object LucideIcons {
     val X = com.composables.icons.lucide.R.drawable.lucide_ic_x
 }
 
-private enum class ProfileTab(val label: String) { ACTIVITY("Activity"), REVIEW("Needs review"), SETTINGS("Settings") }
-
 private fun ApplicationTaskEntity.taskStatus() = runCatching { TaskStatus.valueOf(status) }.getOrDefault(TaskStatus.FAILED)
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun MainShell(screen: AppScreen, select: (AppScreen) -> Unit, reviewCount: Int, openProfile: () -> Unit, content: @Composable () -> Unit) {
+private fun MainShell(screen: AppScreen, select: (AppScreen) -> Unit, email: String, knownName: String?, openProfile: () -> Unit, content: @Composable () -> Unit) {
     BackHandler(enabled = screen != AppScreen.CHAT) { select(AppScreen.CHAT) }
     val keyboardOpen = WindowInsets.isImeVisible
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
-        topBar = { KwelaTopBar(reviewCount, openProfile) },
+        topBar = { KwelaTopBar(email, knownName, openProfile) },
         bottomBar = { if (!keyboardOpen) KwelaTabBar(screen, select) }
     ) { padding -> Box(Modifier.padding(padding)) { content() } }
 }
 
+/** The top of every main screen: the Kwela name in the middle and a small profile chip at the right. */
 @Composable
-private fun KwelaAvatar(size: Dp) {
+private fun KwelaTopBar(email: String, knownName: String?, onProfile: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Box(Modifier.size(size).background(colors.primaryContainer, CircleShape), Alignment.Center) {
-        Text("K", color = colors.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = (size.value * 0.45f).sp)
-    }
-}
-
-@Composable
-private fun KwelaTopBar(reviewCount: Int, onAvatar: () -> Unit) {
-    Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).windowInsetsPadding(WindowInsets.statusBars).height(72.dp), Alignment.Center) {
-        Column(Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = "Open profile", role = Role.Button, onClick = onAvatar).padding(horizontal = 16.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            BadgedBox(badge = { if (reviewCount > 0) Badge() }) { KwelaAvatar(40.dp) }
-            Text("Kwela", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-        }
+    val name = DisplayName.of(knownName, email)
+    Box(Modifier.fillMaxWidth().background(colors.surface).windowInsetsPadding(WindowInsets.statusBars).height(72.dp)) {
+        Text("kwela", Modifier.align(Alignment.Center), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
+        Surface(
+            onClick = onProfile, shape = CircleShape, color = colors.surfaceContainer,
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp).semantics { contentDescription = "Open profile" }
+        ) { Box(Modifier.padding(4.dp)) { ProfileAvatar(name, 40.dp) } }
     }
 }
 
@@ -321,102 +318,24 @@ private val tabs = listOf(
     Tab(AppScreen.FILES, "Files", LucideIcons.Folder)
 )
 
+/** A small floating pill with just the icons, the chosen one in a rounded highlight, like Material 3's compact navigation. */
 @Composable
 private fun KwelaTabBar(screen: AppScreen, select: (AppScreen) -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Box(Modifier.fillMaxWidth().background(colors.surface).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Surface(shape = RoundedCornerShape(32.dp), color = colors.surfaceContainer) {
-            Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Box(Modifier.fillMaxWidth().background(colors.surface).navigationBarsPadding().padding(vertical = 10.dp), Alignment.Center) {
+        Surface(shape = CircleShape, color = colors.surfaceContainer) {
+            Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 tabs.forEach { tab ->
                     val isSelected = tab.screen == screen
-                    Box(Modifier.weight(1f).fillMaxHeight().clickable(remember { MutableInteractionSource() }, null, role = Role.Tab) { select(tab.screen) }.semantics { contentDescription = tab.label; selected = isSelected }, Alignment.Center) {
-                        Box(Modifier.size(width = 64.dp, height = 44.dp).background(if (isSelected) colors.surfaceContainerHighest else Color.Transparent, CircleShape), Alignment.Center) {
-                            Icon(painterResource(tab.icon), null, Modifier.size(24.dp), tint = colors.onSurface)
-                        }
-                    }
+                    Box(
+                        Modifier.size(width = if (isSelected) 88.dp else 64.dp, height = 48.dp).clip(CircleShape)
+                            .background(if (isSelected) colors.surfaceContainerHighest else Color.Transparent)
+                            .clickable(remember { MutableInteractionSource() }, null, role = Role.Tab) { select(tab.screen) }
+                            .semantics { contentDescription = tab.label; selected = isSelected },
+                        Alignment.Center
+                    ) { Icon(painterResource(tab.icon), null, Modifier.size(24.dp), tint = if (isSelected) colors.onSurface else colors.onSurfaceVariant) }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ProfileScreen(
-    state: KwelaUiState, tab: ProfileTab, setTab: (ProfileTab) -> Unit, close: () -> Unit, review: (ApplicationTaskEntity, ReviewDecision) -> Unit,
-    toggleNotifications: (Boolean) -> Unit, setThemeMode: (ThemeMode) -> Unit, signOut: () -> Unit, deleteData: () -> Unit, runTestTask: () -> Unit
-) {
-    BackHandler(onBack = close)
-    val colors = MaterialTheme.colorScheme
-    val waiting = state.tasks.filter { it.taskStatus() == TaskStatus.WAITING_FOR_USER }
-    val working = state.tasks.any { it.taskStatus() == TaskStatus.RUNNING }
-    Column(Modifier.fillMaxSize().background(colors.surface).windowInsetsPadding(WindowInsets.statusBars).navigationBarsPadding()) {
-        Box(Modifier.fillMaxWidth().height(56.dp)) {
-            IconButton(close, Modifier.size(56.dp).align(Alignment.CenterStart)) { Icon(painterResource(LucideIcons.X), "Close", Modifier.size(24.dp), tint = colors.onSurface) }
-        }
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            KwelaAvatar(72.dp)
-            Text("Kwela", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
-            Text(if (working) "Working on your application" else if (waiting.isNotEmpty()) "Waiting for your review" else "Ready", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-        }
-        Surface(Modifier.fillMaxWidth().padding(16.dp), shape = CircleShape, color = colors.surfaceContainer) {
-            Row(Modifier.padding(4.dp)) {
-                ProfileTab.entries.forEach { entry ->
-                    val label = if (entry == ProfileTab.REVIEW && waiting.isNotEmpty()) "${entry.label} (${waiting.size})" else entry.label
-                    Box(Modifier.weight(1f).height(40.dp).clip(CircleShape).background(if (entry == tab) colors.surfaceContainerHighest else Color.Transparent).clickable(role = Role.Tab) { setTab(entry) }, Alignment.Center) {
-                        Text(label, style = MaterialTheme.typography.labelLarge, color = colors.onSurface, maxLines = 1)
-                    }
-                }
-            }
-        }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            when (tab) {
-                ProfileTab.ACTIVITY -> ActivityList(state.tasks, state.documents)
-                ProfileTab.REVIEW -> ReviewList(state.tasks, waiting, review)
-                ProfileTab.SETTINGS -> SettingsScreen(state.email.orEmpty(), state.notificationsEnabled, toggleNotifications, state.themeMode, setThemeMode, signOut, deleteData, runTestTask)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActivityList(tasks: List<ApplicationTaskEntity>, documents: List<SavedDocumentEntity>) {
-    val colors = MaterialTheme.colorScheme
-    val now = remember { System.currentTimeMillis() }
-    val entries = ActivityTimeline.build(tasks.map { TaskSummary(it.id, it.title, it.taskStatus(), it.updatedAt) }, documents.map { DocumentSummary(it.id, it.title, it.createdAt) })
-    if (entries.isEmpty()) {
-        Text("Nothing yet. What Kwela does for you will show up here.", Modifier.padding(horizontal = 20.dp), color = colors.onSurfaceVariant)
-        return
-    }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        items(entries, key = { it.id }) { entry ->
-            Column {
-                Text(entry.title, style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
-                Text(entry.detail, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                Text(ChatTimeHeader.label(entry.at, now), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReviewList(tasks: List<ApplicationTaskEntity>, waiting: List<ApplicationTaskEntity>, review: (ApplicationTaskEntity, ReviewDecision) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val history = tasks.filter { it.taskStatus() == TaskStatus.COMPLETED || it.taskStatus() == TaskStatus.CANCELLED }.sortedByDescending { it.updatedAt }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (waiting.isEmpty()) item { Text("Nothing needs your review right now.", color = colors.onSurfaceVariant) }
-        items(waiting, key = { it.id }) { task ->
-            Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceContainer) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Send “${task.title}”?", style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
-                    Text("Kwela has finished and wants your OK before sending.", color = colors.onSurfaceVariant)
-                    Button(onClick = { review(task, ReviewDecision.APPROVE) }, Modifier.fillMaxWidth()) { Text("Approve") }
-                    FilledTonalButton(onClick = { review(task, ReviewDecision.DENY) }, Modifier.fillMaxWidth(), colors = ButtonDefaults.filledTonalButtonColors(containerColor = colors.surfaceContainerHighest, contentColor = colors.onSurface)) { Text("Deny") }
-                }
-            }
-        }
-        if (history.isNotEmpty()) {
-            item { Text("History", Modifier.padding(top = 12.dp, start = 4.dp), style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant) }
-            item { GroupedList(history.map { ListRow(it.title, ActivityTimeline.describe(it.taskStatus())) }) }
         }
     }
 }
@@ -664,122 +583,4 @@ private fun TaskCard(task: ApplicationTaskEntity, cancel: () -> Unit) {
             TextButton(onClick = cancel, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) { Text("Cancel") }
         }
     }
-}
-
-private class ListRow(val title: String, val subtitle: String? = null, val destructive: Boolean = false, val onClick: (() -> Unit)? = null, val trailing: (@Composable () -> Unit)? = null)
-
-@Composable
-private fun GroupedList(rows: List<ListRow>, modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        rows.forEachIndexed { index, row ->
-            val top = if (index == 0) 28.dp else 4.dp
-            val bottom = if (index == rows.lastIndex) 28.dp else 4.dp
-            val shape = RoundedCornerShape(top, top, bottom, bottom)
-            val body: @Composable () -> Unit = {
-                Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(row.title, style = MaterialTheme.typography.bodyLarge, color = if (row.destructive) colors.error else colors.onSurface)
-                        row.subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant) }
-                    }
-                    row.trailing?.invoke()
-                }
-            }
-            if (row.onClick != null) Surface(onClick = row.onClick, shape = shape, color = colors.surfaceContainer, content = body)
-            else Surface(shape = shape, color = colors.surfaceContainer, content = body)
-        }
-    }
-}
-
-@Composable
-private fun SettingsSection(title: String, rows: List<ListRow>) {
-    if (rows.isEmpty()) return
-    Column {
-        Text(title, Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        GroupedList(rows)
-    }
-}
-
-private const val LICENSES = "AndroidX, Jetpack Compose, Material 3, Room and DataStore: Apache License 2.0\n\nKotlin and kotlinx.coroutines: Apache License 2.0\n\nLucide icons: ISC License, © Lucide Contributors\n\nNoto Sans: SIL Open Font License 1.1"
-
-private fun openUrl(context: android.content.Context, url: String) {
-    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-}
-
-private fun sendEmail(context: android.content.Context, to: String, subject: String) {
-    val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$to")).putExtra(Intent.EXTRA_SUBJECT, subject)
-    runCatching { context.startActivity(intent) }.onFailure { Toast.makeText(context, "No email app found.", Toast.LENGTH_SHORT).show() }
-}
-
-private fun openNotificationSettings(context: android.content.Context) {
-    val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
-    runCatching { context.startActivity(intent) }
-}
-
-@Composable
-private fun SettingsScreen(
-    email: String, notifications: Boolean, toggleNotifications: (Boolean) -> Unit, themeMode: ThemeMode, setThemeMode: (ThemeMode) -> Unit,
-    signOut: () -> Unit, deleteAccount: () -> Unit, runTestTask: () -> Unit
-) {
-    val context = LocalContext.current
-    val colors = MaterialTheme.colorScheme
-    var confirmDelete by remember { mutableStateOf(false) }
-    var pickTheme by remember { mutableStateOf(false) }
-    var showLicenses by remember { mutableStateOf(false) }
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> toggleNotifications(granted) }
-    val setNotifications = { enabled: Boolean ->
-        if (enabled && Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else toggleNotifications(enabled)
-    }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SettingsSection("Account", listOf(
-            ListRow("Email", email),
-            ListRow("Sign out", onClick = signOut),
-            ListRow("Delete account and data", "Removes your chats, files and sign-in details from this phone.", destructive = true, onClick = { confirmDelete = true })
-        ))
-        SettingsSection("Notifications", listOf(
-            ListRow("Replies", "Tell me when Kwela answers while I’m away", onClick = { setNotifications(!notifications) }, trailing = { Switch(notifications, setNotifications) }),
-            ListRow("System notification settings", onClick = { openNotificationSettings(context) })
-        ))
-        SettingsSection("Appearance", listOf(ListRow("Theme", themeMode.label, onClick = { pickTheme = true })))
-        SettingsSection("Privacy and legal", listOfNotNull(
-            BuildConfig.PRIVACY_URL.takeIf { it.isNotBlank() }?.let { url -> ListRow("Privacy policy", onClick = { openUrl(context, url) }) },
-            BuildConfig.TERMS_URL.takeIf { it.isNotBlank() }?.let { url -> ListRow("Terms of service", onClick = { openUrl(context, url) }) },
-            ListRow("Your data", "Your chats and files are saved on this phone. Messages and files you send are processed by Kwela’s servers and OpenAI. Task inputs are kept while work runs, then deleted on success or after 24 hours on failure. Completed replies stay on the server until this phone saves them. Your saved CV profile is kept on our server until you delete your account.")
-        ))
-        SettingsSection("Support", buildList {
-            BuildConfig.SUPPORT_EMAIL.takeIf { it.isNotBlank() }?.let { to ->
-                add(ListRow("Contact support", to, onClick = { sendEmail(context, to, "Kwela support") }))
-                add(ListRow("Send feedback", onClick = { sendEmail(context, to, "Kwela feedback (${BuildConfig.VERSION_NAME})") }))
-            }
-        })
-        SettingsSection("About", listOf(
-            ListRow("Version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"),
-            ListRow("Open-source licenses", onClick = { showLicenses = true })
-        ))
-        if (BuildConfig.DEBUG) SettingsSection("Developer", listOf(ListRow("Run test task", "Debug builds only", onClick = runTestTask)))
-        Spacer(Modifier.height(16.dp))
-    }
-    if (pickTheme) AlertDialog(
-        onDismissRequest = { pickTheme = false }, title = { Text("Theme") },
-        text = {
-            Column {
-                ThemeMode.entries.forEach { mode ->
-                    Row(Modifier.fillMaxWidth().clickable { setThemeMode(mode); pickTheme = false }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = mode == themeMode, onClick = null)
-                        Spacer(Modifier.width(16.dp)); Text(mode.label)
-                    }
-                }
-            }
-        },
-        confirmButton = {}, dismissButton = { TextButton(onClick = { pickTheme = false }) { Text("Cancel") } }
-    )
-    if (showLicenses) AlertDialog(onDismissRequest = { showLicenses = false }, title = { Text("Open-source licenses") }, text = { Text(LICENSES, Modifier.verticalScroll(rememberScrollState())) }, confirmButton = { TextButton(onClick = { showLicenses = false }) { Text("Close") } })
-    if (confirmDelete) AlertDialog(
-        onDismissRequest = { confirmDelete = false }, title = { Text("Delete account and data?") },
-        text = { Text("This removes your chats, files and sign-in details from this phone and signs you out. This can’t be undone.") },
-        confirmButton = { TextButton(onClick = { confirmDelete = false; deleteAccount() }, colors = ButtonDefaults.textButtonColors(contentColor = colors.error)) { Text("Delete") } },
-        dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Keep") } }
-    )
 }
