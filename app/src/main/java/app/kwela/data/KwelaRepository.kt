@@ -1,6 +1,7 @@
 package app.kwela.data
 
 import android.content.Context
+import app.kwela.domain.FailedReplies
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -27,9 +28,12 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     val signedInEmail: Flow<String?> = appContext.preferencesDataStore.data.map { preferences -> preferences[EMAIL_KEY].takeIf { preferences[TOKEN_KEY] != null } }
     val pendingSharedText: Flow<String?> = appContext.preferencesDataStore.data.map { it[PENDING_SHARE_KEY] }
     val themeMode: Flow<ThemeMode> = appContext.preferencesDataStore.data.map { ThemeMode.fromStored(it[THEME_KEY]) }
-    /** The last reply failure to show as a Try again card, kept on disk so it never replays by accident. */
-    val replyError: Flow<String?> = appContext.preferencesDataStore.data.map { it[REPLY_ERROR_KEY] }
-    val failedReplyMessageId: Flow<String?> = appContext.preferencesDataStore.data.map { it[FAILED_REPLY_MESSAGE_KEY] }
+    /** Messages Kwela could not answer, each with the reason. Kept on disk so a failure never replays by accident. */
+    val failedReplies: Flow<Map<String, String>> = appContext.preferencesDataStore.data.map { preferences ->
+        // A failure saved by the previous version (one message, one reason) is carried over once.
+        val legacy = preferences[LEGACY_FAILED_MESSAGE_KEY]?.let { mapOf(it to (preferences[LEGACY_REPLY_ERROR_KEY] ?: "Kwela couldn’t finish that one. Tap Try again.")) }.orEmpty()
+        legacy + FailedReplies.decode(preferences[FAILED_REPLIES_KEY])
+    }
 
     /** A one-time note for the sign-in screen, such as "Please sign in again." */
     val signInNotice: Flow<String?> = appContext.preferencesDataStore.data.map { it[SIGN_IN_NOTICE_KEY] }
@@ -69,8 +73,9 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
                 preferences.remove(CONVERSATION_CONTEXT_KEY)
                 preferences.remove(DRAFT_KEY)
                 preferences.remove(REVIEW_KEY)
-                preferences.remove(REPLY_ERROR_KEY)
-                preferences.remove(FAILED_REPLY_MESSAGE_KEY)
+                preferences.remove(FAILED_REPLIES_KEY)
+            preferences.remove(LEGACY_FAILED_MESSAGE_KEY)
+            preferences.remove(LEGACY_REPLY_ERROR_KEY)
             }
             preferences[DATA_OWNER_EMAIL_KEY] = normalizedEmail
             preferences[EMAIL_KEY] = normalizedEmail
@@ -113,12 +118,18 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
         return first
     }
 
-    suspend fun setReplyError(message: String?) {
-        appContext.preferencesDataStore.edit { if (message == null) it.remove(REPLY_ERROR_KEY) else it[REPLY_ERROR_KEY] = message }
-    }
+    suspend fun markReplyFailed(messageId: String, reason: String) = editFailed { it + (messageId to reason) }
 
-    suspend fun setFailedReplyMessageId(messageId: String?) {
-        appContext.preferencesDataStore.edit { if (messageId == null) it.remove(FAILED_REPLY_MESSAGE_KEY) else it[FAILED_REPLY_MESSAGE_KEY] = messageId }
+    suspend fun clearReplyFailed(messageId: String) = editFailed { it - messageId }
+
+    private suspend fun editFailed(change: (Map<String, String>) -> Map<String, String>) {
+        appContext.preferencesDataStore.edit { preferences ->
+            val legacy = preferences[LEGACY_FAILED_MESSAGE_KEY]?.let { mapOf(it to (preferences[LEGACY_REPLY_ERROR_KEY] ?: "Kwela couldn’t finish that one. Tap Try again.")) }.orEmpty()
+            preferences.remove(LEGACY_FAILED_MESSAGE_KEY)
+            preferences.remove(LEGACY_REPLY_ERROR_KEY)
+            val next = FailedReplies.encode(change(legacy + FailedReplies.decode(preferences[FAILED_REPLIES_KEY])))
+            if (next == null) preferences.remove(FAILED_REPLIES_KEY) else preferences[FAILED_REPLIES_KEY] = next
+        }
     }
 
     suspend fun setSignInNotice(message: String?) {
@@ -167,8 +178,9 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
             preferences.remove(PENDING_SHARE_KEY)
             preferences.remove(DRAFT_KEY)
             preferences.remove(REVIEW_KEY)
-            preferences.remove(REPLY_ERROR_KEY)
-            preferences.remove(FAILED_REPLY_MESSAGE_KEY)
+            preferences.remove(FAILED_REPLIES_KEY)
+            preferences.remove(LEGACY_FAILED_MESSAGE_KEY)
+            preferences.remove(LEGACY_REPLY_ERROR_KEY)
             preferences.remove(ANSWERED_KEY)
             preferences.remove(PROFILE_KEY)
             preferences.remove(CONVERSATION_CONTEXT_KEY)
@@ -183,8 +195,9 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
         val TOKEN_KEY = stringPreferencesKey("device_token")
         val PROFILE_KEY = stringPreferencesKey("candidate_profile")
         val CONVERSATION_CONTEXT_KEY = stringPreferencesKey("conversation_context")
-        val REPLY_ERROR_KEY = stringPreferencesKey("reply_error")
-        val FAILED_REPLY_MESSAGE_KEY = stringPreferencesKey("failed_reply_message_id")
+        val FAILED_REPLIES_KEY = stringPreferencesKey("failed_replies")
+        private val LEGACY_FAILED_MESSAGE_KEY = stringPreferencesKey("failed_reply_message_id")
+        private val LEGACY_REPLY_ERROR_KEY = stringPreferencesKey("reply_error")
         val SIGN_IN_NOTICE_KEY = stringPreferencesKey("sign_in_notice")
         val ANSWERED_KEY = stringPreferencesKey("answered_review_lines")
         const val ANSWERED_SEPARATOR = "\u0001"

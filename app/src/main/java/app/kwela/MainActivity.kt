@@ -34,6 +34,19 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import app.kwela.domain.ReplyPacing
+import app.kwela.domain.MessageDelivery
+import app.kwela.domain.Delivery
+import app.kwela.domain.FailedReplies
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.filled.AccountCircle
@@ -205,7 +218,7 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                         ProfileScreen(state, profileTab, { profileTab = it }, { vm.setScreen(AppScreen.CHAT) }, vm::review, vm::setNotificationsEnabled, vm::setThemeMode, vm::signOut, vm::deleteAccount, vm::startTestTask)
                     } else MainShell(state.screen, vm::setScreen, reviewCount, openProfile) {
                         when (state.screen) {
-                            AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile, state.pendingAttachment, state.isReplying, state.replyIsSlow, state.replyError, vm::removeAttachment, vm::retryReply, state.documents, docActions, state.pendingReview, state.downloadGate, vm::answerReview, vm::addMissingDetails, vm::downloadAnyway)
+                            AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile, state.pendingAttachment, state.isReplying, state.replyIsSlow, vm::removeAttachment, vm::retryReply, state.failedReplies, state.pendingMessages, vm::resendMessage, vm::deleteMessage, state.documents, docActions, state.pendingReview, state.downloadGate, vm::answerReview, vm::addMissingDetails, vm::downloadAnyway)
                             AppScreen.FILES -> FilesScreen(state.documents, docActions)
                         }
                     }
@@ -409,14 +422,19 @@ private fun ReviewList(tasks: List<ApplicationTaskEntity>, waiting: List<Applica
 }
 
 @Composable
-private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<ApplicationTaskEntity>, draft: String, setDraft: (String) -> Unit, send: () -> Unit, suggestion: (String) -> Unit, cancelTask: (ApplicationTaskEntity) -> Unit, attach: (String) -> Unit, pendingAttachment: PendingAttachment?, isReplying: Boolean, slowWait: Boolean, replyError: String?, removeAttachment: () -> Unit, retry: () -> Unit, documents: List<SavedDocumentEntity>, docActions: DocumentActions, pendingReview: ReviewFinding?, downloadGate: DownloadGate?, answerReview: (String) -> Unit, addMissing: () -> Unit, downloadAnyway: () -> Unit) {
+private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<ApplicationTaskEntity>, draft: String, setDraft: (String) -> Unit, send: () -> Unit, suggestion: (String) -> Unit, cancelTask: (ApplicationTaskEntity) -> Unit, attach: (String) -> Unit, pendingAttachment: PendingAttachment?, isReplying: Boolean, slowWait: Boolean, removeAttachment: () -> Unit, retry: () -> Unit, failed: Map<String, String>, pendingMessages: Map<String, Boolean>, resend: (String) -> Unit, deleteMessage: (String) -> Unit, documents: List<SavedDocumentEntity>, docActions: DocumentActions, pendingReview: ReviewFinding?, downloadGate: DownloadGate?, answerReview: (String) -> Unit, addMissing: () -> Unit, downloadAnyway: () -> Unit) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val now = remember { System.currentTimeMillis() }
     val listState = rememberLazyListState()
     val composerFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    LaunchedEffect(messages.size, isReplying, replyError) { if (messages.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1) }
+    // The message whose "Check options" sheet is open.
+    var optionsFor by rememberSaveable { mutableStateOf<String?>(null) }
+    fun deliveryOf(message: ChatMessageEntity): Delivery =
+        if (message.role != "USER" || LocalMessages.isLocal(message.id)) Delivery.SENT
+        else MessageDelivery.of(message.id, failed.keys, pendingMessages, ReplyPacing.isSlow(message.content, message.attachmentUri != null))
+    LaunchedEffect(messages.size, isReplying, failed.size) { if (messages.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -440,15 +458,27 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
                         if (ChatTimeHeader.shouldShow(messages.getOrNull(index - 1)?.createdAt, message.createdAt)) {
                             Text(ChatTimeHeader.label(message.createdAt, now), Modifier.fillMaxWidth().padding(vertical = 8.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                         }
-                        MessageBubble(message, documents, docActions, showsGroupCards = message.documentGroupId == null || newestWithGroup[message.documentGroupId] == message.id)
+                        MessageBubble(message, documents, docActions, showsGroupCards = message.documentGroupId == null || newestWithGroup[message.documentGroupId] == message.id, delivery = deliveryOf(message), onOptions = { optionsFor = message.id })
                     }
                 }
                 items(tasks.filter { it.status == "RUNNING" || it.status == "QUEUED" }) { task -> TaskCard(task, { cancelTask(task) }) }
-                if (isReplying && !slowWait) item { TypingDots() }
+                // "Typing" would be a lie while the phone is offline and the message is just waiting to go.
+                if (isReplying && !slowWait && pendingMessages.values.none { waiting -> waiting }) item { TypingDots() }
                 item { ChatChips(messages, isReplying, pendingReview, downloadGate, answerReview, addMissing, downloadAnyway, onRevision = { chip -> if (chip == "Something else") { composerFocus.requestFocus(); keyboard?.show() } else suggestion(chip) }) }
-                if (ConversationResume.needsPickUp(LocalMessages.lastRealRole(messages.map { it.id to it.role }), isReplying, replyError != null)) item { PickUpCard(retry) }
-                if (replyError != null) item { ReplyErrorCard(replyError, retry) }
+                if (ConversationResume.needsPickUp(LocalMessages.lastRealRole(messages.map { it.id to it.role }), isReplying, failed.isNotEmpty())) item { PickUpCard(retry) }
             }
+        }
+        val optionsMessage = messages.firstOrNull { it.id == optionsFor }
+        val optionsDelivery = optionsMessage?.let(::deliveryOf) ?: Delivery.SENT
+        // Close the sheet once the message has nothing left to report.
+        LaunchedEffect(optionsDelivery, optionsMessage) { if (optionsFor != null && !MessageDelivery.hasOptions(optionsDelivery)) optionsFor = null }
+        if (optionsMessage != null && MessageDelivery.hasOptions(optionsDelivery)) {
+            DeliveryOptionsSheet(
+                optionsDelivery, FailedReplies.reason(failed[optionsMessage.id]),
+                resend = { optionsFor = null; resend(optionsMessage.id) },
+                delete = { optionsFor = null; deleteMessage(optionsMessage.id) },
+                dismiss = { optionsFor = null }
+            )
         }
         if (pendingAttachment != null) AttachmentChip(pendingAttachment.name, removeAttachment)
         Row(Modifier.fillMaxWidth().imePadding().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
@@ -524,14 +554,55 @@ private fun KwelaBubble(text: String) {
     }
 }
 
+/** The small line under a message that has not gone through, as in Google Messages: what happened, and where to find the choices. */
 @Composable
-private fun ReplyErrorCard(message: String, retry: () -> Unit) {
+private fun DeliveryLine(delivery: Delivery, onOptions: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Surface(shape = RoundedCornerShape(24.dp), color = colors.errorContainer, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(message, Modifier.weight(1f), color = colors.onErrorContainer)
-            TextButton(onClick = retry) { Text("Try again", color = colors.onErrorContainer) }
+    val failed = delivery == Delivery.FAILED
+    val tint = if (failed) colors.error else colors.onSurfaceVariant
+    Row(Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+        if (failed) Icon(Icons.Outlined.ErrorOutline, null, Modifier.size(16.dp), tint = tint)
+        Text(" ${MessageDelivery.line(delivery)} ", style = MaterialTheme.typography.labelMedium, color = tint)
+        Text(
+            "Check options", style = MaterialTheme.typography.labelMedium, textDecoration = TextDecoration.Underline,
+            color = if (failed) colors.error else colors.primary,
+            // A comfortable thumb target, not just the width of the words.
+            modifier = Modifier.defaultMinSize(minHeight = 40.dp).clickable(onClick = onOptions).padding(horizontal = 4.dp).wrapContentHeight(Alignment.CenterVertically)
+        )
+        if (delivery == Delivery.WAITING) Icon(Icons.Outlined.Schedule, "Waiting", Modifier.size(16.dp), tint = tint)
+    }
+}
+
+/** The small drawer from Google Messages. Not sent: Resend or Delete. Still sending: Sending..., or Stop sending and delete. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DeliveryOptionsSheet(delivery: Delivery, error: String?, resend: () -> Unit, delete: () -> Unit, dismiss: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    ModalBottomSheet(onDismissRequest = dismiss, containerColor = colors.surfaceContainer) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp)) {
+            if (delivery == Delivery.FAILED) {
+                error?.let { Text(it, Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant) }
+                SheetRow(Icons.AutoMirrored.Outlined.Send, "Resend", resend)
+                SheetRow(Icons.Outlined.Delete, "Delete", delete)
+            } else {
+                Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp, color = colors.onSurfaceVariant)
+                    Spacer(Modifier.width(24.dp))
+                    Text("Sending…", style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant)
+                }
+                SheetRow(Icons.Outlined.Delete, "Stop sending and delete", delete)
+            }
         }
+    }
+}
+
+@Composable
+private fun SheetRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().height(56.dp).clickable(onClick = onClick).padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, Modifier.size(24.dp), tint = colors.onSurface)
+        Spacer(Modifier.width(24.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
     }
 }
 
@@ -555,7 +626,7 @@ private fun MomentChip(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessageEntity, documents: List<SavedDocumentEntity>, docActions: DocumentActions, showsGroupCards: Boolean) {
+private fun MessageBubble(message: ChatMessageEntity, documents: List<SavedDocumentEntity>, docActions: DocumentActions, showsGroupCards: Boolean, delivery: Delivery, onOptions: () -> Unit) {
     val user = message.role == "USER"
     val colors = MaterialTheme.colorScheme
     val bubbles = if (user) listOf(message.content) else BubbleSplitter.split(message.content).ifEmpty { listOf(message.content) }
@@ -575,6 +646,7 @@ private fun MessageBubble(message: ChatMessageEntity, documents: List<SavedDocum
                 }
             }
         }
+        if (user && MessageDelivery.hasOptions(delivery)) DeliveryLine(delivery, onOptions)
         // Cards for a job's files sit under its newest reply only, so a revised CV is never shown twice.
         message.documentGroupId?.takeIf { showsGroupCards }?.let { group ->
             documents.filter { it.groupId == group && it.kind != "job" }.sortedBy { it.createdAt }.forEach { ArtifactCard(it, docActions) }

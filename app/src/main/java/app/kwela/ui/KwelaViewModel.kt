@@ -26,6 +26,7 @@ import app.kwela.domain.ShowRequest
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import app.kwela.domain.LocalMessages
+import app.kwela.domain.MessageDelivery
 import app.kwela.domain.ReplyPacing
 import app.kwela.domain.SignInReplyParser
 import app.kwela.domain.SignInCodeRequestParser
@@ -105,11 +106,18 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeReplyWork() {
         viewModelScope.launch {
             WorkManager.getInstance(getApplication<Application>()).getWorkInfosForUniqueWorkFlow(ReplyWorker.UNIQUE).collect { infos ->
-                val info = infos.firstOrNull { !it.state.isFinished }
-                mutableState.value = mutableState.value.copy(isReplying = info != null, replyIsSlow = info != null && ReplyWorker.TAG_SLOW in info.tags)
+                val pending = infos.filter { !it.state.isFinished }
+                val info = pending.firstOrNull()
+                // A job that has already tried and been put back in the queue is waiting for a connection.
+                val byMessage = pending.mapNotNull { work ->
+                    MessageDelivery.messageIdFromTags(work.tags)?.let { it to (work.state == WorkInfo.State.ENQUEUED && work.runAttemptCount > 0) }
+                }.toMap()
+                // Messages queued behind one that is waiting for a connection are waiting too.
+                val waitingAll = if (byMessage.values.any { it }) byMessage.mapValues { true } else byMessage
+                mutableState.value = mutableState.value.copy(isReplying = info != null, replyIsSlow = info != null && ReplyWorker.TAG_SLOW in info.tags, pendingMessages = waitingAll)
             }
         }
-        viewModelScope.launch { repository.replyError.collect { error -> mutableState.value = mutableState.value.copy(replyError = error) } }
+        viewModelScope.launch { repository.failedReplies.collect { failed -> mutableState.value = mutableState.value.copy(failedReplies = failed) } }
         viewModelScope.launch {
             repository.signInNotice.collect { notice ->
                 if (notice != null) {
@@ -191,8 +199,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                 pendingEmail = "",
                 screen = AppScreen.CHAT,
                 draftText = if (changedAccount && mutableState.value.draftText == draftBeforeSignIn) "" else mutableState.value.draftText,
-                pendingAttachment = if (changedAccount) null else mutableState.value.pendingAttachment,
-                replyError = null
+                pendingAttachment = if (changedAccount) null else mutableState.value.pendingAttachment
             )
         }
     }
@@ -228,7 +235,6 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     /** "Let me see the CV": answered right here, with no wait. The file comes back as a card in the chat, ready to open. */
     private fun showFile(said: String, wanted: ShowRequest) {
-        mutableState.value = mutableState.value.copy(replyError = null)
         viewModelScope.launch {
             repository.saveDraftNow(mutableState.value.draftText)
             val now = System.currentTimeMillis()
@@ -245,16 +251,56 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** "Pick up where you left off": sends the newest message again, unless something is already being worked on. */
     fun retryReply() {
-        if (mutableState.value.isReplying) return
+        if (mutableState.value.isReplying || mutableState.value.pendingMessages.isNotEmpty()) return
         viewModelScope.launch {
-            val failedId = repository.failedReplyMessageId.first()
-            val targetMessage = repository.messages.first().firstOrNull { it.id == failedId }
-                ?: repository.messages.first().lastOrNull { !LocalMessages.isLocal(it.id) && it.role == "USER" }
-            if (targetMessage == null) return@launch
-            val slow = ReplyPacing.isSlow(targetMessage.content, targetMessage.attachmentUri != null)
-            mutableState.value = mutableState.value.copy(isReplying = true, replyIsSlow = slow)
-            ReplyScheduler.enqueue(getApplication(), targetMessage.id, slow, retry = true)
+            val failed = repository.failedReplies.first().keys
+            val sent = repository.messages.first().filter { !LocalMessages.isLocal(it.id) && it.role == "USER" }
+            val target = sent.lastOrNull { it.id in failed } ?: sent.lastOrNull()
+            if (target != null) resendMessage(target.id, force = true)
+        }
+    }
+
+    /**
+     * "Resend" under a message that was not sent. It only works on a message still marked "Not sent", and the mark is cleared inside the same lock,
+     * so tapping twice, even at once, starts it only once.
+     */
+    fun resendMessage(messageId: String, force: Boolean = false) {
+        viewModelScope.launch {
+            sendLock.withLock {
+                if (messageId in mutableState.value.pendingMessages) return@withLock
+                if (!force && messageId !in mutableState.value.failedReplies) return@withLock
+                val target = repository.messages.first().firstOrNull { it.id == messageId && it.role == "USER" } ?: return@withLock
+                val slow = ReplyPacing.isSlow(target.content, target.attachmentUri != null)
+                // Clear "Not sent" at once, so the person sees something happen.
+                repository.clearReplyFailed(messageId)
+                mutableState.value = mutableState.value.copy(isReplying = true, replyIsSlow = slow, failedReplies = mutableState.value.failedReplies - messageId)
+                ReplyScheduler.enqueue(getApplication(), target.id, slow, retry = true)
+            }
+        }
+    }
+
+    /**
+     * "Delete" or "Stop sending and delete": stops work on the message and removes it, with the app's own notes about it.
+     * Stopping one job can also stop the jobs queued behind it, so those are put back in the queue.
+     */
+    fun deleteMessage(messageId: String) {
+        val queuedBehind = mutableState.value.pendingMessages.keys - messageId
+        WorkManager.getInstance(getApplication<Application>()).cancelAllWorkByTag(MessageDelivery.tag(messageId))
+        viewModelScope.launch {
+            sendLock.withLock {
+                val all = repository.messages.first()
+                if (all.firstOrNull { it.id == messageId }?.role != "USER") return@withLock
+                all.filter { it.id == messageId || it.id.startsWith("${LocalMessages.PREFIX}$messageId-") }.forEach { repository.deleteMessage(it.id) }
+                repository.clearReplyFailed(messageId)
+                mutableState.value = mutableState.value.copy(pendingMessages = mutableState.value.pendingMessages - messageId)
+                // Answering a message twice is harmless (the reply is saved under one fixed id), but silently dropping one is not.
+                queuedBehind.forEach { id ->
+                    val message = all.firstOrNull { it.id == id } ?: return@forEach
+                    ReplyScheduler.enqueue(getApplication(), id, ReplyPacing.isSlow(message.content, message.attachmentUri != null))
+                }
+            }
         }
     }
 

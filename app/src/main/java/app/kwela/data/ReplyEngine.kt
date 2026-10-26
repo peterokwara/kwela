@@ -50,13 +50,12 @@ class ReplyOutcome(
 class ReplyEngine(private val context: Context, private val repository: KwelaRepository, private val api: KwelaApi) {
     suspend fun run(targetMessageId: String, retryKey: String? = null): ReplyOutcome {
         val outcome = produce(targetMessageId, retryKey)
-        // Keep a previous task's retry card visible while later queued messages run.
+        // A message the person deleted while this ran must not leave a "Not sent" mark behind.
+        val stillThere = repository.messages.first().any { it.id == targetMessageId }
         if (outcome.error != null) {
-            repository.setFailedReplyMessageId(targetMessageId)
-            repository.setReplyError(outcome.error)
-        } else if (!outcome.pending && !outcome.sessionExpired && repository.failedReplyMessageId.first() == targetMessageId) {
-            repository.setReplyError(null)
-            repository.setFailedReplyMessageId(null)
+            if (stillThere) repository.markReplyFailed(targetMessageId, outcome.error)
+        } else if (!outcome.pending && !outcome.sessionExpired) {
+            repository.clearReplyFailed(targetMessageId)
         }
         if (outcome.sessionExpired) repository.setSignInNotice("Please sign in again.")
         return outcome

@@ -56,6 +56,7 @@ object ReplyScheduler {
         val request = OneTimeWorkRequestBuilder<ReplyWorker>()
             .setInputData(Data.Builder().putString(ReplyWorker.KEY_TARGET_MESSAGE_ID, targetMessageId).apply { if (retry) putString(ReplyWorker.KEY_RETRY_KEY, java.util.UUID.randomUUID().toString()) }.build())
             .setBackoffCriteria(BackoffPolicy.LINEAR, 15, java.util.concurrent.TimeUnit.SECONDS)
+            .addTag(app.kwela.domain.MessageDelivery.tag(targetMessageId))
             .apply { if (slow) addTag(ReplyWorker.TAG_SLOW) }
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(ReplyWorker.UNIQUE, ExistingWorkPolicy.APPEND_OR_REPLACE, request)

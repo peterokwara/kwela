@@ -30,7 +30,10 @@ data class KwelaUiState(
     val pendingAttachment: PendingAttachment? = null,
     val isReplying: Boolean = false,
     val replyIsSlow: Boolean = false,
-    val replyError: String? = null,
+    /** Messages Kwela could not answer, each with the reason. Each shows "Not sent" under it. */
+    val failedReplies: Map<String, String> = emptyMap(),
+    /** Messages still being worked on, each mapped to whether it is waiting for a connection. */
+    val pendingMessages: Map<String, Boolean> = emptyMap(),
     val message: String? = null,
     val pendingReview: ReviewFinding? = null,
     val downloadGate: DownloadGate? = null,
