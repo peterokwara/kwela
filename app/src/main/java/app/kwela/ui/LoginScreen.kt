@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,16 +65,23 @@ fun LoginScreen(
     val focus = LocalFocusManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var code by remember { mutableStateOf("") }
-    var emailFormOpen by remember { mutableStateOf(!GoogleSignIn.available) }
+    var code by rememberSaveable { mutableStateOf("") }
+    var emailFormOpen by rememberSaveable { mutableStateOf(!GoogleSignIn.available) }
+    // True while Google's sheet is open, so a second tap cannot open another one.
+    var googleSheetOpen by remember { mutableStateOf(false) }
     val requestCode = { focus.clearFocus(); request() }
     val signInWithGoogle = {
         val activity = context as? Activity
-        if (activity != null && !working) scope.launch {
-            when (val result = GoogleSignIn.requestToken(activity)) {
-                is GoogleSignInResult.Token -> onGoogleToken(result.idToken)
-                GoogleSignInResult.Dismissed -> onGoogleProblem(null)
-                is GoogleSignInResult.Failed -> { onGoogleProblem(result.message); emailFormOpen = true }
+        if (activity != null && !working && !googleSheetOpen) scope.launch {
+            googleSheetOpen = true
+            try {
+                when (val result = GoogleSignIn.requestToken(activity)) {
+                    is GoogleSignInResult.Token -> onGoogleToken(result.idToken)
+                    GoogleSignInResult.Dismissed -> Unit
+                    is GoogleSignInResult.Failed -> { onGoogleProblem(result.message); emailFormOpen = true }
+                }
+            } finally {
+                googleSheetOpen = false
             }
         }
     }
@@ -97,7 +105,7 @@ fun LoginScreen(
         if (!otp) {
             if (GoogleSignIn.available) {
                 Button(
-                    onClick = { signInWithGoogle() }, Modifier.fillMaxWidth().height(56.dp), enabled = !working, shape = CircleShape,
+                    onClick = { signInWithGoogle() }, Modifier.fillMaxWidth().height(56.dp), enabled = !working && !googleSheetOpen, shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceContainerHighest, contentColor = colors.onSurface),
                     border = BorderStroke(1.dp, colors.outlineVariant)
                 ) { Text(googleLabel(), style = MaterialTheme.typography.titleMedium) }

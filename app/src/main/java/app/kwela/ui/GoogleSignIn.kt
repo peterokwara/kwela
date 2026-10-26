@@ -1,6 +1,7 @@
 package app.kwela.ui
 
 import android.app.Activity
+import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
@@ -40,9 +41,12 @@ object GoogleSignIn {
             GoogleSignInResult.Dismissed
         } catch (_: NoCredentialException) {
             GoogleSignInResult.Failed("No Google account found on this phone. Add one in Settings, or use your email.")
-        } catch (_: GoogleIdTokenParsingException) {
+        } catch (error: GoogleIdTokenParsingException) {
+            Log.w("KwelaGoogleSignIn", "Google sent a token the app could not read", error)
             GoogleSignInResult.Failed("Google sign-in didn’t work. Use your email instead.")
-        } catch (_: GetCredentialException) {
+        } catch (error: GetCredentialException) {
+            // A wrong client id or signing fingerprint lands here, so keep the real reason for debugging.
+            Log.w("KwelaGoogleSignIn", "Google sign-in failed: ${error.type}", error)
             GoogleSignInResult.Failed("Google sign-in didn’t work. Use your email instead.")
         }
     }

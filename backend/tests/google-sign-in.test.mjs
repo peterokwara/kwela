@@ -92,13 +92,25 @@ test("Google's keys are fetched once, then reused, and fetched again for a key i
     const second = await makeSigner("key-2");
     let keys = [first.jwk];
     let fetches = 0;
-    const verify = createGoogleTokenVerifier({ clientId: CLIENT_ID, now: () => NOW, fetchKeys: async () => { fetches += 1; return { keys }; } });
+    let clock = NOW;
+    const verify = createGoogleTokenVerifier({ clientId: CLIENT_ID, now: () => clock, fetchKeys: async () => { fetches += 1; return { keys }; } });
     assert.ok(await verify(await first.sign(goodClaims())));
     assert.ok(await verify(await first.sign(goodClaims())));
     assert.equal(fetches, 1);
     keys = [first.jwk, second.jwk];
-    assert.ok(await verify(await second.sign(goodClaims())));
+    clock = NOW + 61_000;
+    assert.ok(await verify(await second.sign({ ...goodClaims(), iat: clock / 1000 - 10, exp: clock / 1000 + 3000 })));
     assert.equal(fetches, 2);
+});
+
+test("tokens with made-up key ids cannot make the server fetch Google's keys over and over", async () => {
+    const real = await makeSigner("key-1");
+    const forger = await makeSigner("made-up");
+    let fetches = 0;
+    const verify = createGoogleTokenVerifier({ clientId: CLIENT_ID, now: () => NOW, fetchKeys: async () => { fetches += 1; return { keys: [real.jwk] }; } });
+    assert.ok(await verify(await real.sign(goodClaims())));
+    for (let index = 0; index < 5; index += 1) assert.equal(await verify(await forger.sign(goodClaims())), null);
+    assert.equal(fetches, 1);
 });
 
 test("sign-in with Google starts a session for the verified email", async () => {

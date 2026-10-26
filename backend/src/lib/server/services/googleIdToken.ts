@@ -42,6 +42,8 @@ export interface IGoogleVerifierOptions {
 
 const GOOGLE_KEYS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const KEY_CACHE_MS = 60 * 60 * 1000;
+const MIN_REFETCH_MS = 60 * 1000;
+const FETCH_TIMEOUT_MS = 5000;
 const CLOCK_SKEW_SECONDS = 60;
 const ISSUERS = new Set(["https://accounts.google.com", "accounts.google.com"]);
 
@@ -76,7 +78,7 @@ function readSegment(segment: string): Record<string, unknown> | null {
  * @returns The key set.
  */
 async function fetchGoogleKeys(): Promise<IGoogleKeySet> {
-    const response = await fetch(GOOGLE_KEYS_URL);
+    const response = await fetch(GOOGLE_KEYS_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!response.ok) throw new Error(`Google keys request failed with ${response.status}.`);
     return (await response.json()) as IGoogleKeySet;
 }
@@ -98,7 +100,8 @@ export function createGoogleTokenVerifier(options: IGoogleVerifierOptions): (idT
             const known = cached!.keys.find((key) => key.kid === kid);
             if (known) return known;
         }
-        // An unknown key id means Google rotated its keys, so look again once.
+        // An unknown key id may mean Google rotated its keys, so look again. But the id comes from an unchecked token, so never more than once a minute.
+        if (cached && now() - cached.fetchedAt < MIN_REFETCH_MS) return null;
         const keySet = await fetchKeys();
         cached = { keys: keySet.keys as KeyWithId[], fetchedAt: now() };
         return cached.keys.find((key) => key.kid === kid) ?? null;

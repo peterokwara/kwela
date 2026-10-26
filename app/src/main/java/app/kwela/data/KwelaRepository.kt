@@ -82,7 +82,8 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
             preferences[DATA_OWNER_EMAIL_KEY] = normalizedEmail
             preferences[EMAIL_KEY] = normalizedEmail
             preferences[TOKEN_KEY] = sessionToken
-            if (displayName.isNullOrBlank()) preferences.remove(DISPLAY_NAME_KEY) else preferences[DISPLAY_NAME_KEY] = displayName
+            // An email sign-in has no name, so it keeps the one Google gave for the same account, and drops it for a different one.
+            if (!displayName.isNullOrBlank()) preferences[DISPLAY_NAME_KEY] = displayName else if (changedAccount) preferences.remove(DISPLAY_NAME_KEY)
         }
         return changedAccount
     }
