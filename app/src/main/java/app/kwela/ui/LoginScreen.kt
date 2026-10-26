@@ -1,6 +1,8 @@
 package app.kwela.ui
 
 import android.app.Activity
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +34,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +46,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.layout.size
+import app.kwela.R
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -64,10 +72,12 @@ fun LoginScreen(
 ) {
     val colors = MaterialTheme.colorScheme
     val context = LocalContext.current
+    val buttonScale = LocalDensity.current.fontScale.coerceIn(1f, 1.5f)
     val scope = rememberCoroutineScope()
     val analytics = (context.applicationContext as KwelaApplication).analytics
     // True while Google's sheet is open, so a second tap cannot open another one.
     var googleSheetOpen by remember { mutableStateOf(false) }
+    var bottomSheetShown by rememberSaveable { mutableStateOf(false) }
     val signInWithGoogle = {
         val activity = context as? Activity
         if (activity != null && !working && !googleSheetOpen) scope.launch {
@@ -76,12 +86,26 @@ fun LoginScreen(
             try {
                 when (val result = GoogleSignIn.requestToken(activity)) {
                     is GoogleSignInResult.Token -> onGoogleToken(result.idToken, result.photoUrl)
-                    GoogleSignInResult.Dismissed -> Unit
+                    GoogleSignInResult.Dismissed, GoogleSignInResult.NoCredential -> Unit
                     is GoogleSignInResult.Failed -> onGoogleProblem(result.message)
                 }
             } finally {
                 googleSheetOpen = false
             }
+        }
+    }
+    LaunchedEffect(Unit) {
+        val activity = context as? Activity
+        if (!bottomSheetShown && GoogleSignIn.available && activity != null && !working) {
+            bottomSheetShown = true
+            googleSheetOpen = true
+            try {
+                when (val result = GoogleSignIn.requestBottomSheet(activity)) {
+                    is GoogleSignInResult.Token -> onGoogleToken(result.idToken, result.photoUrl)
+                    GoogleSignInResult.Dismissed, GoogleSignInResult.NoCredential -> Unit
+                    is GoogleSignInResult.Failed -> onGoogleProblem(result.message)
+                }
+            } finally { googleSheetOpen = false }
         }
     }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp)) {
@@ -100,11 +124,14 @@ fun LoginScreen(
         )
         Spacer(Modifier.height(24.dp))
         if (GoogleSignIn.available) {
-            Button(
-                onClick = { signInWithGoogle() }, Modifier.fillMaxWidth().height(56.dp), enabled = !working && !googleSheetOpen, shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceContainerHighest, contentColor = colors.onSurface),
-                border = BorderStroke(1.dp, colors.outlineVariant)
-            ) { Text(googleLabel(), style = MaterialTheme.typography.titleMedium) }
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Image(
+                    painter = painterResource(R.drawable.google_sign_in),
+                    contentDescription = "Sign in with Google",
+                    modifier = Modifier.size(width = 180.dp * buttonScale, height = 48.dp * buttonScale)
+                        .clickable(enabled = !working && !googleSheetOpen, role = Role.Button) { signInWithGoogle() }
+                )
+            }
         } else {
             Text("Google sign-in is unavailable. Please try again later.", color = colors.error)
         }
@@ -113,13 +140,6 @@ fun LoginScreen(
         Spacer(Modifier.height(24.dp))
         Text("Your chats and files are saved on this device.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
     }
-}
-
-/** "Continue with Google", with the Google G in its own colours. */
-@Composable
-private fun googleLabel(): AnnotatedString = buildAnnotatedString {
-    withStyle(SpanStyle(color = Color(0xFF4285F4), fontWeight = FontWeight.Bold)) { append("G") }
-    append("   Continue with Google")
 }
 
 /** A small, still picture of the chat, so the first screen shows what Kwela is. */
