@@ -249,11 +249,11 @@ private fun KwelaTopBar(email: String, knownName: String?, photoUrl: String?, on
     }
 }
 
-private class Tab(val screen: AppScreen, val label: String, @DrawableRes val icon: Int)
+private class Tab(val screen: AppScreen, val label: String, @DrawableRes val icon: Int, @DrawableRes val selectedIcon: Int)
 
 private val tabs = listOf(
-    Tab(AppScreen.CHAT, "Chat", NavigationSymbols.MessageCircle),
-    Tab(AppScreen.FILES, "Files", NavigationSymbols.Folder)
+    Tab(AppScreen.CHAT, "Chat", NavigationSymbols.MessageCircle, R.drawable.ms_chat_bubble_filled),
+    Tab(AppScreen.FILES, "Files", NavigationSymbols.Folder, R.drawable.ms_folder_filled)
 )
 
 /** A small floating pill with just the icons, the chosen one in a rounded highlight, like Material 3's compact navigation. */
@@ -262,16 +262,16 @@ private fun KwelaTabBar(screen: AppScreen, select: (AppScreen) -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(Modifier.fillMaxWidth().background(colors.surface).navigationBarsPadding().padding(vertical = 10.dp), Alignment.Center) {
         Surface(shape = CircleShape, color = colors.surfaceContainer) {
-            Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(2.dp), verticalAlignment = Alignment.CenterVertically) {
                 tabs.forEach { tab ->
                     val isSelected = tab.screen == screen
                     Box(
-                        Modifier.size(width = if (isSelected) 88.dp else 64.dp, height = 48.dp).clip(CircleShape)
-                            .background(if (isSelected) colors.surfaceContainerHighest else Color.Transparent)
+                        Modifier.size(width = if (isSelected) 88.dp else 64.dp, height = 56.dp).clip(CircleShape)
+                            .background(if (isSelected) colors.secondaryContainer else Color.Transparent)
                             .clickable(remember { MutableInteractionSource() }, null, role = Role.Tab) { select(tab.screen) }
                             .semantics { contentDescription = tab.label; selected = isSelected },
                         Alignment.Center
-                    ) { Icon(painterResource(tab.icon), null, Modifier.size(24.dp), tint = if (isSelected) colors.onSurface else colors.onSurfaceVariant) }
+                    ) { Icon(painterResource(if (isSelected) tab.selectedIcon else tab.icon), null, Modifier.size(24.dp), tint = if (isSelected) colors.onSecondaryContainer else colors.onSurfaceVariant) }
                 }
             }
         }
