@@ -6,6 +6,7 @@ import type { IConversationContext } from "../../models/chat/IConversationContex
 import type { ICareerAssistant } from "../../models/services/ICareerAssistant.ts";
 import { careerAgent } from "./agents/careerAgent.ts";
 import { chatMessageToAgentInput } from "./chatMessageInputService.ts";
+import { AssistantFailedError } from "./assistantFailedError.ts";
 import { compactConversationContext } from "./conversationContextService.ts";
 
 /**
@@ -21,7 +22,7 @@ const MAX_ATTEMPTS = 2;
 /**
  * Longest a single agent attempt may run, in milliseconds.
  */
-const ATTEMPT_TIMEOUT_MS = 70_000;
+const ATTEMPT_TIMEOUT_MS = 150_000;
 
 /**
  * What one run of the agent produces: its structured answer (or none) and the tokens it used.
@@ -42,26 +43,26 @@ export interface IAgentRunResult {
  */
 export type AgentRunner = (input: AgentInputItem[]) => Promise<IAgentRunResult>;
 
-/**
- * Raised when the agent could not produce a reply after its attempts. It is never turned into a pretend chat message.
- */
-export class AssistantFailedError extends Error {
-    /**
-     * Creates the error with a message safe to log.
-     */
-    constructor() {
-        super("Kwela could not finish this reply.");
-        this.name = "AssistantFailedError";
-    }
-}
+export { AssistantFailedError };
 
 /** Runs the career agent once with a time limit.
  * @param input Conversation items sent to the agent.
  * @returns The agent's structured output and usage.
  */
 const runCareerAgent: AgentRunner = async (input) => {
-    const result = await run(careerAgent, input, { maxTurns: 8, signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS) });
-    return { output: result.finalOutput ?? null, usage: result.state.usage };
+    const signal = AbortSignal.timeout(ATTEMPT_TIMEOUT_MS);
+    try {
+        const result = await run(careerAgent, input, { maxTurns: 8, signal });
+        return { output: result.finalOutput ?? null, usage: result.state.usage };
+    } catch (error) {
+        // The agent library may wrap the abort in its own error, so go by the signal.
+        if (signal.aborted) {
+            const timeout = new Error("The agent attempt ran out of time.");
+            timeout.name = "TimeoutError";
+            throw timeout;
+        }
+        throw error;
+    }
 };
 
 /** Runs the agent and retries once when it fails or returns nothing usable.
@@ -81,7 +82,7 @@ async function runWithRetry(input: AgentInputItem[], runner: AgentRunner, onUsag
         } catch (error) {
             console.error(`Kwela agent attempt ${attempt} failed:`, error);
             onUsage?.(null);
-            if (error instanceof Error && error.name === "TimeoutError") break;
+            if (error instanceof Error && error.name === "TimeoutError") throw new AssistantFailedError(true);
         }
     }
     throw new AssistantFailedError();

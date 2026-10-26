@@ -4,7 +4,7 @@
     "compatibility_date": "2026-10-22",
     "compatibility_flags": ["nodejs_compat"],
     "vars": {
-        "USAGE_CAP_USD": "1",
+        "USAGE_CAP_USD": "5",
         "GLOBAL_USAGE_CAP_USD": "25",
         "MAX_REQUESTS_PER_MINUTE": "4",
         "INPUT_PRICE_PER_MILLION_USD": "0.10",

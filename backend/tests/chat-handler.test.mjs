@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { AssistantFailedError } from "../src/lib/server/services/assistantFailedError.ts";
 import { createChatPostHandler } from "../src/lib/server/services/chatPostHandlerService.ts";
 
 function streamText(text) {
@@ -135,4 +136,31 @@ test("chat handler rejects unsupported attachment extensions before calling the 
 
     assert.equal(response.status, 400);
     assert.equal(called, false);
+});
+
+test("a reply that ran out of time answers with a 4xx, so the durable run does not repeat the same slow attempt", async () => {
+    const assistant = { async respond() { throw new AssistantFailedError(true); } };
+    const handler = createChatPostHandler(assistant);
+    const response = await handler({
+        request: new Request("http://kwela.test/api/chat", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ messages: [{ id: "1", role: "user", content: "Do my CV." }] })
+        })
+    });
+    assert.equal(response.status, 408);
+    assert.match((await response.json()).message, /took too long/);
+});
+
+test("any other assistant failure stays a retryable 500", async () => {
+    const assistant = { async respond() { throw new AssistantFailedError(); } };
+    const handler = createChatPostHandler(assistant);
+    const response = await handler({
+        request: new Request("http://kwela.test/api/chat", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ messages: [{ id: "1", role: "user", content: "Do my CV." }] })
+        })
+    });
+    assert.equal(response.status, 500);
 });

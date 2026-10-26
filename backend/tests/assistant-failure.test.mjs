@@ -54,6 +54,6 @@ test("a timeout is not retried, because a second attempt would only make the wai
         error.name = "TimeoutError";
         throw error;
     });
-    await assert.rejects(assistant.respond(userMessage), /could not finish/i);
+    await assert.rejects(assistant.respond(userMessage), (error) => error.timedOut === true);
     assert.equal(calls, 1);
 });

@@ -1,5 +1,6 @@
 import type { ICareerAssistant } from "../../models/services/ICareerAssistant.ts";
 import type { IUsageLimitService } from "../../models/services/IUsageLimitService.ts";
+import { AssistantFailedError } from "./assistantFailedError.ts";
 import { readChatMessages } from "./chatRequestValidationService.ts";
 import { estimateCostMicros, MINIMUM_CHARGE_MICROS, type IModelPrices } from "./usagePolicy.ts";
 
@@ -57,6 +58,10 @@ export function createChatPostHandler(assistant: ICareerAssistant, usage?: IChat
             });
         } catch (cause) {
             console.error("Kwela assistant request failed:", cause);
+            // A timeout is answered with a 4xx so the durable run stops at once instead of waiting through a second identical attempt.
+            if (cause instanceof AssistantFailedError && cause.timedOut) {
+                return Response.json({ message: "That one took too long. Tap Try again, or send a shorter job text." }, { status: 408 });
+            }
             return Response.json(
                 { message: "Couldn’t finish that one. Tap Try again." },
                 { status: 500 }
