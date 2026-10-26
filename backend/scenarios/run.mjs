@@ -85,7 +85,7 @@ async function runScenario(scenario, token) {
         const problems = check(body, { firstHandover: !handedOver, askedWhatItIs: /real person|are you (an? )?(ai|bot|human)/i.test(text) });
         if (body.type === "application_pack") handedOver = true;
         for (const bubble of body.message.split("\n\n")) lines.push(`> **Kwela:** ${bubble.replaceAll("\n", "\n> ")}`, ">");
-        if (body.applicationPack) lines.push(`> _[hands over: ${body.applicationPack.job?.title ?? "job"}, CV + cover letter + ${body.applicationPack.applicationAnswers?.length ?? 0} answers; job breakdown: ${body.applicationPack.job?.keyRequirements?.length ?? 0} wants, ${body.applicationPack.job?.responsibilities?.length ?? 0} duties]_`, ">");
+        if (body.applicationPack) lines.push(`> _[hands over: ${body.applicationPack.job?.title ?? "job"}, CV + cover letter + ${body.applicationPack.applicationAnswers?.length ?? 0} answers; certifications: ${body.applicationPack.resume?.certifications?.length ?? 0}; job breakdown: ${body.applicationPack.job?.keyRequirements?.length ?? 0} wants, ${body.applicationPack.job?.responsibilities?.length ?? 0} duties]_`, ">");
         lines.push(`_${seconds}s · ${body.type}${problems.length ? " · " + problems.map(([level, note]) => `${level}: ${note}`).join("; ") : " · all checks passed"}_`, "");
         results.push(...problems);
         history.push({ id: `a${index}`, role: "assistant", content: body.message, ...(body.applicationPack ? { application: body.applicationPack } : {}) });

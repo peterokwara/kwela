@@ -79,6 +79,12 @@ object CareerReplyParser {
         return sections.joinToString("\n\n")
     }
 
+    /** The sections of a CV in the order the PDF uses, so the preview shows everything the PDF will. */
+    private val defaultSectionOrder = listOf(
+        "professionalSummary", "workExperience", "education", "projects", "certifications", "accomplishments",
+        "professionalDevelopment", "professionalMemberships", "volunteerExperience", "languages", "skills", "referees"
+    )
+
     private fun formatResume(resume: JsonObject): String {
         val details = resume.obj("personalDetails")
         val name = listOf(details?.text("firstName"), details?.text("lastName")).filter { !it.isNullOrBlank() }.joinToString(" ")
@@ -86,19 +92,54 @@ object CareerReplyParser {
         val contact = listOf(details?.text("email"), details?.text("phoneNumber"), place).filter { !it.isNullOrBlank() }.joinToString(" · ")
         val sections = mutableListOf<String>()
         sections += listOf(name, contact).filter { it.isNotBlank() }.joinToString("\n")
-        section("PROFESSIONAL SUMMARY", resume.text("professionalSummary"))?.let { sections += it }
-        val jobs = resume.list("employments").map { job ->
-            val heading = listOf(job.text("jobTitle"), job.text("employer")).filter { !it.isNullOrBlank() }.joinToString(", ") + dates(job)
-            (listOf(heading) + job.strings("achievements").map { "- $it" }).joinToString("\n")
-        }
-        if (jobs.isNotEmpty()) sections += "EXPERIENCE\n" + jobs.joinToString("\n\n")
-        val schools = resume.list("education").map { school ->
-            listOf(school.text("degree"), school.text("institution")).filter { !it.isNullOrBlank() }.joinToString(", ") + dates(school)
-        }
-        if (schools.isNotEmpty()) sections += "EDUCATION\n" + schools.joinToString("\n")
-        section("SKILLS", resume.text("skills"))?.let { sections += it }
+        val requested = (resume["sectionOrder"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+        (requested + defaultSectionOrder).distinct().forEach { key -> resumeSection(resume, key)?.let { sections += it } }
         return sections.filter { it.isNotBlank() }.joinToString("\n\n")
     }
+
+    private fun resumeSection(resume: JsonObject, key: String): String? = when (key) {
+        "professionalSummary" -> section("PROFESSIONAL SUMMARY", resume.text("professionalSummary"))
+        "workExperience" -> resume.list("employments").map { job ->
+            val heading = listOf(job.text("jobTitle"), job.text("employer")).filter { !it.isNullOrBlank() }.joinToString(", ") + dates(job)
+            (listOf(heading) + job.strings("achievements").map { "- $it" }).joinToString("\n")
+        }.takeIf { it.isNotEmpty() }?.let { "EXPERIENCE\n" + it.joinToString("\n\n") }
+        "education" -> lines("EDUCATION", resume.list("education").map { school ->
+            listOf(school.text("degree"), school.text("institution")).filter { !it.isNullOrBlank() }.joinToString(", ") + dates(school)
+        })
+        "projects" -> lines("PROJECTS", resume.list("projects").map { item ->
+            val tech = item.strings("technologies").joinToString(", ").takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+            item.text("name").orEmpty() + tech + (item.text("description")?.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty())
+        })
+        "certifications" -> lines("CERTIFICATIONS", resume.list("certifications").map { item ->
+            val extra = listOf(item.text("issueDate"), item.text("credentialId")).filter { !it.isNullOrBlank() }.joinToString(" · ")
+            joinNonBlank(item.text("name"), item.text("issuer")) + (if (extra.isNotBlank()) " ($extra)" else "")
+        })
+        "accomplishments" -> lines("ACCOMPLISHMENTS", resume.list("accomplishments").map { item ->
+            item.text("title").orEmpty() + (item.text("date")?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()) +
+                (item.text("description")?.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty())
+        })
+        "professionalDevelopment" -> lines("PROFESSIONAL DEVELOPMENT", resume.list("professionalDevelopment").map { item ->
+            joinNonBlank(item.text("course_name"), item.text("institution")) + (item.text("issued_date")?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty())
+        })
+        "professionalMemberships" -> lines("PROFESSIONAL MEMBERSHIPS", resume.list("professionalMemberships").map { item ->
+            joinNonBlank(item.text("organization_name"), item.text("membership_type")) + (item.text("member_since")?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty())
+        })
+        "volunteerExperience" -> lines("VOLUNTEER EXPERIENCE", resume.list("volunteerExperience").map { item ->
+            val span = listOf(item.text("start_date"), item.text("end_date")).filter { !it.isNullOrBlank() }.joinToString(" - ")
+            joinNonBlank(item.text("role"), item.text("organization")) + (if (span.isNotBlank()) " ($span)" else "") +
+                (item.text("description")?.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty())
+        })
+        "languages" -> lines("LANGUAGES", resume.list("languages").map { item -> joinNonBlank(item.text("language_name"), item.text("proficiency")) })
+        "skills" -> section("SKILLS", resume.text("skills"))
+        "referees" -> lines("REFEREES", resume.list("referees").map { item ->
+            joinNonBlank(item.text("name"), item.text("position"), item.text("company"), item.text("email"), item.text("phone"))
+        })
+        else -> null
+    }
+
+    private fun lines(title: String, entries: List<String>): String? = entries.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.let { "$title\n" + it.joinToString("\n") }
+
+    private fun joinNonBlank(vararg parts: String?): String = parts.filter { !it.isNullOrBlank() }.joinToString(", ")
 
     private fun formatCoverLetter(letter: JsonObject): String {
         val contact = listOf(letter.text("email"), letter.text("phoneNumber")).filter { !it.isNullOrBlank() }.joinToString(" · ")

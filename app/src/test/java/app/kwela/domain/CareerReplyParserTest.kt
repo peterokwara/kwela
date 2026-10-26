@@ -112,4 +112,55 @@ class CareerReplyParserTest {
             job.body
         )
     }
+
+    @Test
+    fun showsEverySectionOfTheCvNotJustTheFirstFour() {
+        val full = """
+            {"type":"application_pack","message":"Done.","applicationPack":{"job":{"title":"Analyst","company":"Bank"},"resume":{
+              "personalDetails":{"firstName":"Amina","lastName":"Wanjiru","email":"a@example.test","phoneNumber":"0700","city":"Nairobi","country":"Kenya"},
+              "professionalSummary":"Careful analyst.",
+              "employments":[{"jobTitle":"Clerk","employer":"Co","startDate":"2020","endDate":"","isPresent":true,"achievements":["Cleaned reports"]}],
+              "education":[],"skills":"Excel",
+              "projects":[{"name":"Budget app","description":"Tracks spending","technologies":["Kotlin"],"url":"","startDate":"","endDate":""}],
+              "certifications":[{"name":"AWS Cloud Practitioner","issuer":"Amazon","issueDate":"2024","expiryDate":"","credentialId":"ABC123","url":""}],
+              "accomplishments":[{"title":"Employee of the year","description":"Top score","date":"2023"}],
+              "referees":[{"name":"Jo Otieno","position":"Manager","company":"Co","email":"jo@example.test","phone":"0711"}],
+              "languages":[{"language_name":"Swahili","proficiency":"Native","certification":""}],
+              "professionalDevelopment":[{"course_name":"Leadership","institution":"KIM","issued_date":"2022","certificate_id":"","description":""}],
+              "professionalMemberships":[{"organization_name":"ICPAK","membership_number":"1","membership_type":"Member","member_since":"2021","expires_on":"","notes":""}],
+              "volunteerExperience":[{"organization":"Red Cross","role":"Volunteer","start_date":"2019","end_date":"2020","description":"First aid"}]
+            }}}
+        """.trimIndent()
+
+        val body = CareerReplyParser.parse(full)!!.documents.first().body
+
+        assertTrue(body.contains("CERTIFICATIONS\nAWS Cloud Practitioner, Amazon (2024 · ABC123)"))
+        assertTrue(body.contains("PROJECTS\nBudget app (Kotlin): Tracks spending"))
+        assertTrue(body.contains("ACCOMPLISHMENTS\nEmployee of the year (2023): Top score"))
+        assertTrue(body.contains("PROFESSIONAL DEVELOPMENT\nLeadership, KIM (2022)"))
+        assertTrue(body.contains("PROFESSIONAL MEMBERSHIPS\nICPAK, Member (2021)"))
+        assertTrue(body.contains("VOLUNTEER EXPERIENCE\nVolunteer, Red Cross (2019 - 2020): First aid"))
+        assertTrue(body.contains("LANGUAGES\nSwahili, Native"))
+        assertTrue(body.contains("REFEREES\nJo Otieno, Manager, Co, jo@example.test, 0711"))
+        // Same order as the PDF: certifications come before skills, referees last.
+        assertTrue(body.indexOf("CERTIFICATIONS") < body.indexOf("SKILLS"))
+        assertTrue(body.indexOf("SKILLS") < body.indexOf("REFEREES"))
+    }
+
+    @Test
+    fun followsTheSectionOrderTheCvAsksFor() {
+        val ordered = """
+            {"type":"application_pack","message":"Done.","applicationPack":{"job":{"title":"A","company":"B"},"resume":{
+              "personalDetails":{"firstName":"A","lastName":"B","email":"","phoneNumber":"","city":"","country":""},
+              "professionalSummary":"Summary.","employments":[],"education":[],"skills":"Excel",
+              "certifications":[{"name":"CPA","issuer":"ICPAK","issueDate":"","expiryDate":"","credentialId":"","url":""}],
+              "sectionOrder":["certifications","professionalSummary","skills"]
+            }}}
+        """.trimIndent()
+
+        val body = CareerReplyParser.parse(ordered)!!.documents.first().body
+
+        assertTrue(body.indexOf("CERTIFICATIONS") < body.indexOf("PROFESSIONAL SUMMARY"))
+        assertTrue(body.indexOf("PROFESSIONAL SUMMARY") < body.indexOf("SKILLS"))
+    }
 }

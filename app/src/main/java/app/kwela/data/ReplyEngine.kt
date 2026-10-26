@@ -190,6 +190,8 @@ class ReplyEngine(private val context: Context, private val repository: KwelaRep
         if (question != null) {
             repository.saveMessage(ChatMessageEntity("review-$targetMessageId", "ASSISTANT", ReviewPrompts.bubble(question), replyAt + 1))
             repository.savePendingReview(Json.encodeToString(question))
+            // Ask about a line once. Someone who ignores the question should not be asked the same thing again after every reply.
+            repository.addAnsweredReviewLine(question.line)
         }
         reply.candidateProfileJson?.let { profile ->
             repository.saveCandidateProfile(profile)

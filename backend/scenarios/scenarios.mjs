@@ -64,6 +64,25 @@ export const scenarios = [
         ]
     },
     {
+        name: "Adds certifications to a finished CV",
+        turns: [
+            "I saw a job I want",
+            "Peter Okwara, Nairobi, peter@example.test, 0700 000 000. Senior Full Stack Engineer. Careergo Jan 2023 to present: built CV tools in SvelteKit and Cloudflare, led a team of 3. Techno Brain 2019 to 2022: web apps in Node and React. BSc Computer Science 2018. Skills TypeScript, Svelte, React, Node, SQL. Job: Senior Full Stack Engineer at Techno Brain Nairobi, needs TypeScript, React, Node, cloud, mentoring. Please prepare my CV and cover letter.",
+            "please add my certifications: AWS Certified Cloud Practitioner from Amazon in 2024, and Google Associate Cloud Engineer in 2023"
+        ]
+    },
+    {
+        name: "Researches pay online",
+        turns: [
+            "I want better pay",
+            "Peter Okwara, Nairobi, peter@example.test, 0700 000 000. CTO at Careergo since Jan 2023, led a team of 3, built SaaS products in TypeScript and Cloudflare. Applying for Deputy CTO at Tiko in Nairobi, the listing shows no salary. Please prepare my CV. Then please search online and see what pay range i should have for that role"
+        ]
+    },
+    {
+        name: "Pay question on its own",
+        turns: ["I want better pay", "What pay range should I ask for as a Deputy CTO at a tech startup in Nairobi? Please search online."]
+    },
+    {
         name: "Teacher with a long CV",
         turns: [
             "I want better pay",
