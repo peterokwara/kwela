@@ -11,6 +11,7 @@ import app.kwela.domain.ChatRequestBuilder
 import app.kwela.domain.ConversationContextPolicy
 import app.kwela.domain.DocumentUpdates
 import app.kwela.domain.FileEntry
+import app.kwela.domain.HonestyLine
 import app.kwela.domain.LocalMessages
 import app.kwela.domain.OutgoingMessage
 import app.kwela.domain.OutgoingRole
@@ -178,9 +179,12 @@ class ReplyEngine(private val context: Context, private val repository: KwelaRep
                 SavedDocumentEntity(id, document.title, document.body, now + index, document.kind.ifEmpty { null }, document.sourceJson, groupId, reply.groupTitle)
             )
         }
+        // Only the first handover says she is a digital helper. A sincere "are you AI?" has no documents, so it is never trimmed.
+        val earlierAssistantTexts = repository.messages.first().filter { it.role == "ASSISTANT" && it.id != "reply-$targetMessageId" }.map { it.content }
+        val message = if (reply.documents.isNotEmpty() && HonestyLine.alreadySaid(earlierAssistantTexts)) HonestyLine.strip(reply.message).ifBlank { reply.message } else reply.message
         repository.saveMessage(
             ChatMessageEntity(
-                "reply-$targetMessageId", "ASSISTANT", reply.message, replyAt,
+                "reply-$targetMessageId", "ASSISTANT", message, replyAt,
                 applicationJson = reply.applicationJson, documentGroupId = if (reply.documents.isEmpty()) null else groupId
             )
         )
@@ -198,7 +202,7 @@ class ReplyEngine(private val context: Context, private val repository: KwelaRep
             api.saveProfile(token, profile)
         }
         api.acknowledgeChatRun(token, runId)
-        return ReplyOutcome(replyText = listOfNotNull(reply.message, question?.let { ReviewPrompts.bubble(it) }).joinToString("\n\n"))
+        return ReplyOutcome(replyText = listOfNotNull(message, question?.let { ReviewPrompts.bubble(it) }).joinToString("\n\n"))
     }
 
     private suspend fun expired(): ReplyOutcome {

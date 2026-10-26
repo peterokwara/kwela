@@ -5,7 +5,7 @@ export interface IReviewFinding {
     /**
      * Which rule found it.
      */
-    kind: "duty_phrase" | "no_numbers";
+    kind: "duty_phrase";
     /**
      * The person's own line, quoted exactly.
      */
@@ -25,47 +25,25 @@ export interface IReviewFinding {
  */
 const MAX_FINDINGS = 3;
 
-/**
- * Lines shorter than this are not worth asking about.
- */
-const MIN_LINE_LENGTH = 25;
-
 const dutyOpening = /^(responsible for|duties (included|include)|tasked with|worked on|in charge of)\b/i;
-/**
- * Lines longer than this already carry plenty of detail, so a "how many?" question would feel silly.
- */
-const MAX_QUESTION_LINE_LENGTH = 110;
-
 const hasDigit = /\d/;
-const strategic = /\b(strategy|strategic|roadmap|vision|architecture|end-to-end|end to end|oversaw|owned)\b/i;
-const saysHowMuch = /\b(dozens?|hundreds?|thousands?|several|a few|many|daily|weekly|monthly|yearly|every|each|nightly|hourly)\b/i;
 
 /** Reviews the achievement lines of a CV with fixed rules, with no AI involved.
+ * Only weak duty phrases with no result are asked about. A "how many?" question on any other line sounded out of place, so it was removed.
  * @param resume The CV, where the most recent job comes first.
- * @returns Up to three findings: duties with no result first, then lines with no numbers.
+ * @returns Up to three findings.
  */
 export function reviewResume(resume: { employments?: { achievements?: string[] }[] }): IReviewFinding[] {
     const lines = (resume.employments ?? []).flatMap((job) => (job.achievements ?? []).map((line) => line.trim()).filter(Boolean));
-    const duties = lines.filter((line) => dutyOpening.test(line) && !hasDigit.test(line));
-    const quiet = lines.filter(
-        (line) => !dutyOpening.test(line) && !hasDigit.test(line) && !saysHowMuch.test(line) && !strategic.test(line) && line.length >= MIN_LINE_LENGTH && line.length <= MAX_QUESTION_LINE_LENGTH
-    );
-    return [
-        ...duties.map(
+    return lines
+        .filter((line) => dutyOpening.test(line) && !hasDigit.test(line))
+        .map(
             (line): IReviewFinding => ({
                 kind: "duty_phrase",
                 line,
                 question: "What changed because of your work on this?",
                 options: ["It got faster", "It saved money", "Fewer mistakes", "More customers", "Not sure"]
             })
-        ),
-        ...quiet.map(
-            (line): IReviewFinding => ({
-                kind: "no_numbers",
-                line,
-                question: "Roughly how many, or how often?",
-                options: ["A few", "Dozens", "Hundreds", "I don’t count"]
-            })
         )
-    ].slice(0, MAX_FINDINGS);
+        .slice(0, MAX_FINDINGS);
 }
