@@ -9,6 +9,7 @@
         "MAX_REQUESTS_PER_MINUTE": "4",
         "INPUT_PRICE_PER_MILLION_USD": "0.10",
         "OUTPUT_PRICE_PER_MILLION_USD": "0.50",
+        "GOOGLE_WEB_CLIENT_ID": "250576903408-s5euv3sidr3s91nnk14gb32428jc7bnj.apps.googleusercontent.com",
         "AUTH_TEST_EMAILS": "ojakaapeter@gmail.com,cliff.gor.dev@gmail.com,ojakaapeter+kwela-scenarios@gmail.com,crazsich@gmail.com"
     },
     "observability": { "enabled": true },

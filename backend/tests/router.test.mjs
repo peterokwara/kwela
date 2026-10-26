@@ -27,6 +27,13 @@ function fakes() {
                 ? { ok: true, token: tokenA, email }
                 : { ok: false, status: 401, message: "That code isn’t right." };
         },
+        async signInWithGoogle(idToken, sourceIp) {
+            calls.google = calls.google ?? [];
+            calls.google.push({ idToken, sourceIp });
+            return idToken === "good-token"
+                ? { ok: true, token: tokenA, email: "amina@example.test", name: "Amina" }
+                : { ok: false, status: 401, message: "Google sign-in didn’t work. Please try again." };
+        },
         async authenticate(token) {
             return sessions.get(token) ?? null;
         },
@@ -213,4 +220,30 @@ test("an incomplete draft costs nothing", async () => {
     const response = await router(request("/api/documents/pdf", { method: "POST", body: { type: "resume", document: {} } }));
     assert.equal(response.status, 400);
     assert.deepEqual(calls.renders, []);
+});
+
+test("Google sign-in returns a session token, the email and the name", async () => {
+    const { router, calls } = fakes();
+    const response = await router(request("/auth/google", { method: "POST", auth: null, body: { idToken: "good-token" }, ip: "1.2.3.4" }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { token: tokenA, email: "amina@example.test", name: "Amina" });
+    assert.deepEqual(calls.google, [{ idToken: "good-token", sourceIp: "1.2.3.4" }]);
+});
+
+test("Google sign-in refuses a token that does not check out", async () => {
+    const { router } = fakes();
+    const response = await router(request("/auth/google", { method: "POST", auth: null, body: { idToken: "forged" } }));
+    assert.equal(response.status, 401);
+});
+
+test("Google sign-in refuses a missing or oversized token before asking Google", async () => {
+    const { router, calls } = fakes();
+    assert.equal((await router(request("/auth/google", { method: "POST", auth: null, body: {} }))).status, 400);
+    assert.equal((await router(request("/auth/google", { method: "POST", auth: null, body: { idToken: "x".repeat(9000) } }))).status, 400);
+    assert.equal(calls.google, undefined);
+});
+
+test("Google sign-in only accepts POST", async () => {
+    const { router } = fakes();
+    assert.equal((await router(request("/auth/google", { auth: null }))).status, 405);
 });

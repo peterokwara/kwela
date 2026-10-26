@@ -40,6 +40,10 @@ class KwelaApi(
     suspend fun requestCode(email: String): ApiResult =
         call(null, "POST", "/auth/request-code", buildJsonObject { put("email", email) }.toString())
 
+    /** Signs in with the ID token Google's sign-in sheet gave the phone. */
+    suspend fun googleSignIn(idToken: String): ApiResult =
+        call(null, "POST", "/auth/google", buildJsonObject { put("idToken", idToken) }.toString())
+
     suspend fun verifyCode(email: String, code: String): ApiResult =
         call(null, "POST", "/auth/verify", buildJsonObject { put("email", email); put("code", code) }.toString())
 

@@ -111,6 +111,7 @@ import app.kwela.data.local.SavedDocumentEntity
 import app.kwela.ui.AppScreen
 import app.kwela.ui.KwelaViewModel
 import app.kwela.ui.startingMoments
+import app.kwela.ui.LoginScreen
 import app.kwela.ui.ProfileSheet
 import app.kwela.ui.SettingsScreen
 import app.kwela.ui.ProfileAvatar
@@ -192,7 +193,7 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
         Surface(Modifier.fillMaxSize(), color = colors.surface) {
             when {
                 state.isRestoring -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                state.email == null -> LoginScreen(state.pendingEmail, state.otpRequested, state.loginTestCode, state.isSigningIn, state.loginError, vm::setPendingEmail, vm::requestOtp, vm::verifyOtp, vm::backToEmail)
+                state.email == null -> LoginScreen(state.pendingEmail, state.otpRequested, state.loginTestCode, state.isSigningIn, state.loginError, vm::setPendingEmail, vm::requestOtp, vm::verifyOtp, vm::backToEmail, vm::signInWithGoogle, vm::googleSignInFailed)
                 else -> {
                     var showProfile by rememberSaveable { mutableStateOf(false) }
                     var previewId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -218,62 +219,16 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                         DocumentPreviewScreen(previewDocument, docActions, changeRequest = { line, note -> previewId = null; vm.sendChangeRequest(previewDocument.title, line, note) }) { previewId = null }
                     } else if (state.screen == AppScreen.PROFILE) {
                         SettingsScreen(state.notificationsEnabled, vm::setNotificationsEnabled, state.themeMode, vm::setThemeMode) { vm.setScreen(AppScreen.CHAT) }
-                    } else MainShell(state.screen, vm::setScreen, state.email.orEmpty(), null, { showProfile = true }) {
+                    } else MainShell(state.screen, vm::setScreen, state.email.orEmpty(), state.displayName, { showProfile = true }) {
                         when (state.screen) {
                             AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile, state.pendingAttachment, state.isReplying, state.replyIsSlow, vm::removeAttachment, vm::retryReply, state.failedReplies, state.pendingMessages, vm::resendMessage, vm::deleteMessage, state.documents, docActions, state.pendingReview, state.downloadGate, vm::answerReview, vm::addMissingDetails, vm::downloadAnyway)
                             AppScreen.FILES -> FilesScreen(state.documents, docActions)
                         }
                     }
-                    if (showProfile && previewDocument == null) ProfileSheet(state.email.orEmpty(), null, openSettings = { vm.setScreen(AppScreen.PROFILE) }, signOut = vm::signOut, deleteAccount = vm::deleteAccount) { showProfile = false }
+                    if (showProfile && previewDocument == null) ProfileSheet(state.email.orEmpty(), state.displayName, openSettings = { vm.setScreen(AppScreen.PROFILE) }, signOut = vm::signOut, deleteAccount = vm::deleteAccount) { showProfile = false }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun LoginScreen(email: String, otp: Boolean, testCode: String?, working: Boolean, error: String?, onEmail: (String) -> Unit, request: () -> Unit, verify: (String) -> Unit, back: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    var code by remember { mutableStateOf("") }
-    val focus = LocalFocusManager.current
-    val requestCode = { focus.clearFocus(); request() }
-    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 24.dp), verticalArrangement = Arrangement.Center) {
-        BrandMark()
-        Spacer(Modifier.height(24.dp))
-        Text(if (otp && testCode != null) "Your sign-in code" else if (otp) "Check your email" else "Welcome to Kwela", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = colors.onSurface)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            if (otp && testCode != null) "Private test code: $testCode. Enter it to continue."
-            else if (otp) "We sent a 6-digit code to $email. Enter it to continue."
-            else "Saw a job tonight? Be ready to apply in minutes. No blank page, no cyber café queue.",
-            color = colors.onSurfaceVariant
-        )
-        Spacer(Modifier.height(28.dp))
-        if (!otp) {
-            OutlinedTextField(email, onEmail, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { requestCode() }))
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = requestCode, Modifier.fillMaxWidth().height(52.dp), enabled = !working, shape = CircleShape) { Text(if (working) "Sending code…" else "Continue") }
-        } else {
-            OutlinedTextField(code, { if (it.length <= 6 && it.all(Char::isDigit)) code = it }, Modifier.fillMaxWidth(), label = { Text("6-digit code") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { if (code.length == 6) { focus.clearFocus(); verify(code) } }))
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = { focus.clearFocus(); verify(code) }, Modifier.fillMaxWidth().height(52.dp), enabled = !working && code.length == 6, shape = CircleShape) { Text(if (working) "Checking…" else "Sign in") }
-            Row {
-                TextButton(onClick = back, enabled = !working) { Text("Use a different email") }
-                TextButton(onClick = request, enabled = !working) { Text("Send a new code") }
-            }
-        }
-        if (error != null) { Spacer(Modifier.height(8.dp)); Text(error, color = MaterialTheme.colorScheme.error) }
-        Spacer(Modifier.height(28.dp))
-        Text("Your chats and files are saved on this device.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun BrandMark() {
-    val colors = MaterialTheme.colorScheme
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(42.dp).background(colors.primary, CircleShape), Alignment.Center) { Text("K", color = colors.onPrimary, fontWeight = FontWeight.Bold) }
-        Spacer(Modifier.width(12.dp)); Text("kwela", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
     }
 }
 

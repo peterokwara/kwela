@@ -1,5 +1,6 @@
 import type { IAuthStore, IResolvedSession } from "../../models/services/IAuthStore.ts";
 import type { IOtpMailer } from "../../models/services/IOtpMailer.ts";
+import type { IGoogleIdentity } from "./googleIdToken.ts";
 
 /**
  * Outcome of an auth action: success data, or a status code and message safe to show a person.
@@ -11,6 +12,7 @@ const MAX_ATTEMPTS = 5;
 const REQUEST_WINDOW_MS = 15 * 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 3;
 const MAX_REQUESTS_PER_IP_WINDOW = 10;
+const MAX_GOOGLE_SIGN_INS_PER_IP_WINDOW = 30;
 const SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -34,6 +36,10 @@ export interface IAuthServiceOptions {
      * Fixed six-digit code for an allow-listed private test. Omit when email delivery is enabled.
      */
     testCode?: string;
+    /**
+     * Checks a Google ID token. Omit when Google sign-in is not set up.
+     */
+    googleVerifier?: (idToken: string) => Promise<IGoogleIdentity | null>;
     /**
      * Clock in milliseconds since the epoch.
      */
@@ -192,6 +198,26 @@ export function createAuthService(options: IAuthServiceOptions) {
             const token = randomToken();
             await store.createSession({ tokenHash: await sha256Hex(token), accountId: account.id, createdAt: time });
             return { ok: true, token, email };
+        },
+
+        /** Signs a person in with a Google ID token from the phone. Google has already checked who they are, so no code is needed.
+         * @param idToken Token the Google sign-in sheet gave the app.
+         * @param sourceIp Address of the caller, for rate limiting.
+         * @returns A bearer token, the verified address and name, or a failure.
+         */
+        async signInWithGoogle(idToken: string, sourceIp?: string): Promise<{ ok: true; token: string; email: string; name: string } | AuthFailure> {
+            if (!options.googleVerifier) return { ok: false, status: 503, message: "Google sign-in isn’t available right now. Use your email instead." };
+            const time = now();
+            const ip = sourceIp?.trim();
+            if (ip && !(await store.hitRateLimit(await hashLimiterKey(secret, "ip", `google:${ip}`), time, REQUEST_WINDOW_MS, MAX_GOOGLE_SIGN_INS_PER_IP_WINDOW))) {
+                return { ok: false, status: 429, message: "Too many sign-in attempts from this connection. Wait a few minutes and try again." };
+            }
+            const identity = await options.googleVerifier(idToken);
+            if (!identity) return { ok: false, status: 401, message: "Google sign-in didn’t work. Please try again." };
+            const account = await store.findOrCreateAccount(identity.email, await accountIdForEmail(secret, identity.email), time);
+            const token = randomToken();
+            await store.createSession({ tokenHash: await sha256Hex(token), accountId: account.id, createdAt: time });
+            return { ok: true, token, email: identity.email, name: identity.name };
         },
 
         /** Finds the signed-in person for a bearer token.

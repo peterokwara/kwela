@@ -15,6 +15,7 @@ data class DownloadGate(val documentId: String, val gaps: List<String>, val shar
 data class KwelaUiState(
     val isRestoring: Boolean = true,
     val email: String? = null,
+    val displayName: String? = null,
     val pendingEmail: String = "",
     val otpRequested: Boolean = false,
     val loginTestCode: String? = null,

@@ -33,6 +33,7 @@ class MainActivityFlowTest {
     @Test
     fun demoOtpUnlocksChatAndBottomNavigationWorks() {
         compose.onNodeWithText("Welcome to Kwela").assertIsDisplayed()
+        compose.onNodeWithText("Use email instead").performClick()
         compose.onNode(hasText("Email address", substring = true)).performTextInput("not-an-email")
         compose.onNodeWithText("Continue").assertIsDisplayed().performClick()
         compose.onNodeWithText("Enter a valid email address.").assertIsDisplayed()
@@ -62,12 +63,15 @@ class MainActivityFlowTest {
 
         compose.onNodeWithContentDescription("Files").performClick()
         compose.onNodeWithText("Your files will appear here").assertIsDisplayed()
-        compose.onNodeWithText("Kwela").performClick()
+        compose.onNodeWithContentDescription("Open profile").performClick()
         compose.onNodeWithText("Settings").performClick()
-        compose.onNodeWithText("Notifications").assertIsDisplayed()
+        compose.onNodeWithText("Reply notifications").assertIsDisplayed()
         compose.onNodeWithText("Theme").assertIsDisplayed()
-        compose.onNodeWithText("Open-source licenses").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithContentDescription("Close").performClick()
+        compose.onNodeWithText("About Kwela").performClick()
+        compose.onNodeWithText("Licences").assertIsDisplayed()
+        compose.onNodeWithText("Privacy Policy").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        compose.onNodeWithContentDescription("Close settings").performClick()
         compose.onNodeWithContentDescription("Chat").performClick()
         compose.onNodeWithText("What’s going on right now?").assertIsDisplayed()
 

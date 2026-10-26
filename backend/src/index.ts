@@ -1,5 +1,6 @@
 import { createRouter } from "./router.ts";
 import { createAuthService } from "./lib/server/services/authService.ts";
+import { createGoogleTokenVerifier } from "./lib/server/services/googleIdToken.ts";
 import { D1AuthStoreService, type AuthDatabase } from "./lib/server/services/d1AuthStoreService.ts";
 import { AllowlistedTestOtpMailer, CloudflareOtpMailer, LogOtpMailer, SelectingOtpMailer, ZeptoMailOtpMailer, type IEmailSender } from "./lib/server/services/otpMailers.ts";
 import { createChatPostHandler } from "./lib/server/services/chatPostHandlerService.ts";
@@ -58,6 +59,10 @@ export interface Env {
     AUTH_TEST_EMAILS?: string;
     /** Fixed private-test code. Only accepted for AUTH_TEST_EMAILS addresses. Remove before public production. */
     AUTH_TEST_CODE?: string;
+    /**
+     * OAuth web client id Google signs sign-in tokens for. Google sign-in is off while this is empty.
+     */
+    GOOGLE_WEB_CLIENT_ID?: string;
     USAGE_CAP_USD?: string;
     GLOBAL_USAGE_CAP_USD?: string;
     MAX_REQUESTS_PER_MINUTE?: string;
@@ -86,6 +91,18 @@ function readUsageConfig(env: Env): { limits: IUsageLimits; prices: IModelPrices
 
 let postChat: ReturnType<typeof createChatPostHandler> | undefined;
 
+/** Google's signing keys are cached inside the verifier, so one verifier is kept for as long as this instance lives. */
+let googleVerifier: { clientId: string; verify: ReturnType<typeof createGoogleTokenVerifier> } | null = null;
+
+/** Gives the verifier for a client id, creating it once.
+ * @param clientId OAuth web client id.
+ * @returns The verifier.
+ */
+function googleVerifierFor(clientId: string) {
+    if (googleVerifier?.clientId !== clientId) googleVerifier = { clientId, verify: createGoogleTokenVerifier({ clientId }) };
+    return googleVerifier.verify;
+}
+
 export default {
     async fetch(request: Request, env: Env): Promise<Response> {
         if (!env.AUTH_SECRET) return Response.json({ message: "Kwela is not set up yet." }, { status: 503 });
@@ -105,7 +122,8 @@ export default {
                 ? new AllowlistedTestOtpMailer(testers)
                 : new SelectingOtpMailer(realMailer, new LogOtpMailer(), testers),
             secret: env.AUTH_SECRET,
-            testCode
+            testCode,
+            googleVerifier: env.GOOGLE_WEB_CLIENT_ID?.trim() ? googleVerifierFor(env.GOOGLE_WEB_CLIENT_ID.trim()) : undefined
         });
         const router = createRouter({
             auth,

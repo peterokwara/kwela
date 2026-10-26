@@ -18,4 +18,16 @@ class SignInReplyParserTest {
         assertNull(SignInReplyParser.parse("""{"token":" ","email":"amina@example.test"}"""))
         assertNull(SignInReplyParser.parse("not json"))
     }
+
+    @Test
+    fun readsTheNameWhenGoogleSendsOne() {
+        val reply = SignInReplyParser.parse("""{"token":"abc123","email":"amina@example.test","name":"Amina Wanjiru"}""")
+
+        assertEquals(SignedIn("abc123", "amina@example.test", "Amina Wanjiru"), reply)
+    }
+
+    @Test
+    fun aBlankNameIsTreatedAsNoName() {
+        assertNull(SignInReplyParser.parse("""{"token":"abc123","email":"a@example.test","name":"  "}""")?.name)
+    }
 }

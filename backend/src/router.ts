@@ -21,6 +21,7 @@ export interface IRouterDependencies {
             email: string,
             code: string
         ): Promise<{ ok: true; token: string; email: string } | { ok: false; status: number; message: string }>;
+        signInWithGoogle(idToken: string, sourceIp?: string): Promise<{ ok: true; token: string; email: string; name: string } | { ok: false; status: number; message: string }>;
         authenticate(token: string): Promise<IResolvedSession | null>;
         signOut(token: string): Promise<void>;
         deleteAccount(accountId: string, email: string): Promise<void>;
@@ -149,9 +150,14 @@ export function createRouter(deps: IRouterDependencies): (request: Request) => P
             await deps.auth.signOut(token);
             return json({ ok: true });
         }
-        if (pathname !== "/auth/request-code" && pathname !== "/auth/verify") return json({ message: "Not found." }, 404);
+        if (pathname !== "/auth/request-code" && pathname !== "/auth/verify" && pathname !== "/auth/google") return json({ message: "Not found." }, 404);
         if (request.method !== "POST") return methodNotAllowed(["POST"]);
         const body = await readObject(request);
+        if (pathname === "/auth/google") {
+            if (typeof body?.idToken !== "string" || body.idToken.length === 0 || body.idToken.length > 8000) return json({ message: "Google sign-in didn’t work. Please try again." }, 400);
+            const result = await deps.auth.signInWithGoogle(body.idToken, request.headers.get("cf-connecting-ip") ?? undefined);
+            return result.ok ? json({ token: result.token, email: result.email, name: result.name }) : json({ message: result.message }, result.status);
+        }
         if (pathname === "/auth/request-code") {
             if (typeof body?.email !== "string") return json({ message: "Enter a valid email address." }, 400);
             const result = await deps.auth.requestCode(body.email, request.headers.get("cf-connecting-ip") ?? undefined);

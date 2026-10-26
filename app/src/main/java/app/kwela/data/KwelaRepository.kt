@@ -26,6 +26,8 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     val tasks: Flow<List<ApplicationTaskEntity>> = dao.observeTasks()
     val documents: Flow<List<SavedDocumentEntity>> = dao.observeDocuments()
     val signedInEmail: Flow<String?> = appContext.preferencesDataStore.data.map { preferences -> preferences[EMAIL_KEY].takeIf { preferences[TOKEN_KEY] != null } }
+    /** The name Google gave at sign-in, when the person signed in with Google. */
+    val displayName: Flow<String?> = appContext.preferencesDataStore.data.map { it[DISPLAY_NAME_KEY] }
     val pendingSharedText: Flow<String?> = appContext.preferencesDataStore.data.map { it[PENDING_SHARE_KEY] }
     val themeMode: Flow<ThemeMode> = appContext.preferencesDataStore.data.map { ThemeMode.fromStored(it[THEME_KEY]) }
     /** Messages Kwela could not answer, each with the reason. Kept on disk so a failure never replays by accident. */
@@ -58,7 +60,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     suspend fun deleteDocument(id: String) = dao.deleteDocument(id)
 
     /** Stores a session and clears account-scoped local data when this phone changes accounts. */
-    suspend fun signIn(email: String, sessionToken: String): Boolean {
+    suspend fun signIn(email: String, sessionToken: String, displayName: String? = null): Boolean {
         val normalizedEmail = email.trim().lowercase()
         val previousOwner = appContext.preferencesDataStore.data.first()[DATA_OWNER_EMAIL_KEY]
         val changedAccount = previousOwner != normalizedEmail
@@ -74,18 +76,19 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
                 preferences.remove(DRAFT_KEY)
                 preferences.remove(REVIEW_KEY)
                 preferences.remove(FAILED_REPLIES_KEY)
-            preferences.remove(LEGACY_FAILED_MESSAGE_KEY)
-            preferences.remove(LEGACY_REPLY_ERROR_KEY)
+                preferences.remove(LEGACY_FAILED_MESSAGE_KEY)
+                preferences.remove(LEGACY_REPLY_ERROR_KEY)
             }
             preferences[DATA_OWNER_EMAIL_KEY] = normalizedEmail
             preferences[EMAIL_KEY] = normalizedEmail
             preferences[TOKEN_KEY] = sessionToken
+            if (displayName.isNullOrBlank()) preferences.remove(DISPLAY_NAME_KEY) else preferences[DISPLAY_NAME_KEY] = displayName
         }
         return changedAccount
     }
 
     suspend fun signOut() {
-        appContext.preferencesDataStore.edit { it.remove(EMAIL_KEY); it.remove(TOKEN_KEY) }
+        appContext.preferencesDataStore.edit { it.remove(EMAIL_KEY); it.remove(TOKEN_KEY); it.remove(DISPLAY_NAME_KEY) }
     }
 
     /** The bearer token for the Kwela API, or null when signed out. */
@@ -175,6 +178,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
         appContext.preferencesDataStore.edit { preferences ->
             preferences.remove(EMAIL_KEY)
             preferences.remove(TOKEN_KEY)
+            preferences.remove(DISPLAY_NAME_KEY)
             preferences.remove(PENDING_SHARE_KEY)
             preferences.remove(DRAFT_KEY)
             preferences.remove(REVIEW_KEY)
@@ -190,6 +194,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
 
     private companion object {
         val EMAIL_KEY = stringPreferencesKey("signed_in_email")
+        val DISPLAY_NAME_KEY = stringPreferencesKey("display_name")
         val DATA_OWNER_EMAIL_KEY = stringPreferencesKey("data_owner_email")
         val PENDING_SHARE_KEY = stringPreferencesKey("pending_shared_text")
         val TOKEN_KEY = stringPreferencesKey("device_token")

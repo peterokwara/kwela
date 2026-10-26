@@ -117,6 +117,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                 mutableState.value = mutableState.value.copy(isReplying = info != null, replyIsSlow = info != null && ReplyWorker.TAG_SLOW in info.tags, pendingMessages = waitingAll)
             }
         }
+        viewModelScope.launch { repository.displayName.collect { name -> mutableState.value = mutableState.value.copy(displayName = name) } }
         viewModelScope.launch { repository.failedReplies.collect { failed -> mutableState.value = mutableState.value.copy(failedReplies = failed) } }
         viewModelScope.launch {
             repository.signInNotice.collect { notice ->
@@ -178,30 +179,44 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     fun verifyOtp(code: String) {
         if (mutableState.value.isSigningIn) return
         mutableState.value = mutableState.value.copy(isSigningIn = true, loginError = null)
-        viewModelScope.launch {
-            val result = api.verifyCode(mutableState.value.pendingEmail.trim(), code.trim())
-            val signedIn = (result as? ApiResult.Success)?.let { SignInReplyParser.parse(it.body) }
-            if (signedIn == null) {
-                mutableState.value = mutableState.value.copy(
-                    isSigningIn = false,
-                    loginError = (result as? ApiResult.Failure)?.message ?: "Kwela sent a reply the app couldn’t read. Please try again."
-                )
-                return@launch
-            }
-            taskJob?.cancel()
-            taskJob = null
-            val draftBeforeSignIn = mutableState.value.draftText
-            val changedAccount = repository.signIn(signedIn.email, signedIn.token)
+        viewModelScope.launch { finishSignIn(api.verifyCode(mutableState.value.pendingEmail.trim(), code.trim())) }
+    }
+
+    /** The person chose an account in Google's sign-in sheet. Kwela's server checks the token and starts a session. */
+    fun signInWithGoogle(idToken: String) {
+        if (mutableState.value.isSigningIn) return
+        mutableState.value = mutableState.value.copy(isSigningIn = true, loginError = null)
+        viewModelScope.launch { finishSignIn(api.googleSignIn(idToken)) }
+    }
+
+    /** Google's sheet could not give a token. Shown on the sign-in screen so the person can use email instead. */
+    fun googleSignInFailed(message: String?) {
+        mutableState.value = mutableState.value.copy(isSigningIn = false, loginError = message)
+    }
+
+    /** Saves a session from either way of signing in, or shows why it did not work. */
+    private suspend fun finishSignIn(result: ApiResult) {
+        val signedIn = (result as? ApiResult.Success)?.let { SignInReplyParser.parse(it.body) }
+        if (signedIn == null) {
             mutableState.value = mutableState.value.copy(
                 isSigningIn = false,
-                otpRequested = false,
-                loginTestCode = null,
-                pendingEmail = "",
-                screen = AppScreen.CHAT,
-                draftText = if (changedAccount && mutableState.value.draftText == draftBeforeSignIn) "" else mutableState.value.draftText,
-                pendingAttachment = if (changedAccount) null else mutableState.value.pendingAttachment
+                loginError = (result as? ApiResult.Failure)?.message ?: "Kwela sent a reply the app couldn’t read. Please try again."
             )
+            return
         }
+        taskJob?.cancel()
+        taskJob = null
+        val draftBeforeSignIn = mutableState.value.draftText
+        val changedAccount = repository.signIn(signedIn.email, signedIn.token, signedIn.name)
+        mutableState.value = mutableState.value.copy(
+            isSigningIn = false,
+            otpRequested = false,
+            loginTestCode = null,
+            pendingEmail = "",
+            screen = AppScreen.CHAT,
+            draftText = if (changedAccount && mutableState.value.draftText == draftBeforeSignIn) "" else mutableState.value.draftText,
+            pendingAttachment = if (changedAccount) null else mutableState.value.pendingAttachment
+        )
     }
 
     fun backToEmail() { mutableState.value = mutableState.value.copy(otpRequested = false, loginTestCode = null, loginError = null) }
