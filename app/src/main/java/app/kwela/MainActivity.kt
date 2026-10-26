@@ -33,7 +33,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
 import app.kwela.domain.ReplyPacing
 import app.kwela.domain.MessageDelivery
 import app.kwela.domain.Delivery
@@ -44,24 +43,8 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.outlined.Send
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.AddCircleOutline
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.annotation.DrawableRes
@@ -193,7 +176,7 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
         Surface(Modifier.fillMaxSize(), color = colors.surface) {
             when {
                 state.isRestoring -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                state.email == null -> LoginScreen(state.pendingEmail, state.otpRequested, state.loginTestCode, state.isSigningIn, state.loginError, vm::setPendingEmail, vm::requestOtp, vm::verifyOtp, vm::backToEmail, vm::signInWithGoogle, vm::googleSignInFailed)
+                state.email == null -> LoginScreen(state.isSigningIn, state.loginError, vm::signInWithGoogle, vm::googleSignInFailed)
                 else -> {
                     var showProfile by rememberSaveable { mutableStateOf(false) }
                     var previewId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -219,42 +202,42 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                         DocumentPreviewScreen(previewDocument, docActions, changeRequest = { line, note -> previewId = null; vm.sendChangeRequest(previewDocument.title, line, note) }) { previewId = null }
                     } else if (state.screen == AppScreen.PROFILE) {
                         SettingsScreen(state.notificationsEnabled, vm::setNotificationsEnabled, state.analyticsEnabled, vm::setAnalyticsEnabled, state.themeMode, vm::setThemeMode) { vm.setScreen(AppScreen.CHAT) }
-                    } else MainShell(state.screen, vm::setScreen, state.email.orEmpty(), state.displayName, { showProfile = true }) {
+                    } else MainShell(state.screen, vm::setScreen, state.email.orEmpty(), state.displayName, state.photoUrl, { showProfile = true }) {
                         when (state.screen) {
                             AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile, state.pendingAttachment, state.isReplying, state.replyIsSlow, vm::removeAttachment, vm::retryReply, state.failedReplies, state.pendingMessages, vm::resendMessage, vm::deleteMessage, state.documents, docActions, state.pendingReview, state.downloadGate, vm::answerReview, vm::addMissingDetails, vm::downloadAnyway)
                             AppScreen.FILES -> FilesScreen(state.documents, docActions)
                         }
                     }
-                    if (showProfile && previewDocument == null) ProfileSheet(state.email.orEmpty(), state.displayName, openSettings = { vm.setScreen(AppScreen.PROFILE) }, signOut = vm::signOut, deleteAccount = vm::deleteAccount) { showProfile = false }
+                    if (showProfile && previewDocument == null) ProfileSheet(state.email.orEmpty(), state.displayName, state.photoUrl, openSettings = { vm.setScreen(AppScreen.PROFILE) }, signOut = vm::signOut, deleteAccount = vm::deleteAccount) { showProfile = false }
                 }
             }
         }
     }
 }
 
-private object LucideIcons {
-    val Folder = com.composables.icons.lucide.R.drawable.lucide_ic_folder
-    val MessageCircle = com.composables.icons.lucide.R.drawable.lucide_ic_message_circle
-    val X = com.composables.icons.lucide.R.drawable.lucide_ic_x
+private object NavigationSymbols {
+    val Folder = R.drawable.ms_folder
+    val MessageCircle = R.drawable.ms_chat_bubble
+    val X = R.drawable.ms_close
 }
 
 private fun ApplicationTaskEntity.taskStatus() = runCatching { TaskStatus.valueOf(status) }.getOrDefault(TaskStatus.FAILED)
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun MainShell(screen: AppScreen, select: (AppScreen) -> Unit, email: String, knownName: String?, openProfile: () -> Unit, content: @Composable () -> Unit) {
+private fun MainShell(screen: AppScreen, select: (AppScreen) -> Unit, email: String, knownName: String?, photoUrl: String?, openProfile: () -> Unit, content: @Composable () -> Unit) {
     BackHandler(enabled = screen != AppScreen.CHAT) { select(AppScreen.CHAT) }
     val keyboardOpen = WindowInsets.isImeVisible
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
-        topBar = { KwelaTopBar(email, knownName, openProfile) },
+        topBar = { KwelaTopBar(email, knownName, photoUrl, openProfile) },
         bottomBar = { if (!keyboardOpen) KwelaTabBar(screen, select) }
     ) { padding -> Box(Modifier.padding(padding)) { content() } }
 }
 
 /** The top of every main screen: the Kwela name in the middle and a small profile chip at the right. */
 @Composable
-private fun KwelaTopBar(email: String, knownName: String?, onProfile: () -> Unit) {
+private fun KwelaTopBar(email: String, knownName: String?, photoUrl: String?, onProfile: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val name = DisplayName.of(knownName, email)
     Box(Modifier.fillMaxWidth().background(colors.surface).windowInsetsPadding(WindowInsets.statusBars).height(72.dp)) {
@@ -262,15 +245,15 @@ private fun KwelaTopBar(email: String, knownName: String?, onProfile: () -> Unit
         Surface(
             onClick = onProfile, shape = CircleShape, color = colors.surfaceContainer,
             modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp).semantics { contentDescription = "Open profile" }
-        ) { Box(Modifier.padding(4.dp)) { ProfileAvatar(name, 40.dp) } }
+        ) { Box(Modifier.padding(4.dp)) { ProfileAvatar(name, 40.dp, photoUrl) } }
     }
 }
 
 private class Tab(val screen: AppScreen, val label: String, @DrawableRes val icon: Int)
 
 private val tabs = listOf(
-    Tab(AppScreen.CHAT, "Chat", LucideIcons.MessageCircle),
-    Tab(AppScreen.FILES, "Files", LucideIcons.Folder)
+    Tab(AppScreen.CHAT, "Chat", NavigationSymbols.MessageCircle),
+    Tab(AppScreen.FILES, "Files", NavigationSymbols.Folder)
 )
 
 /** A small floating pill with just the icons, the chosen one in a rounded highlight, like Material 3's compact navigation. */
@@ -357,7 +340,7 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
         if (pendingAttachment != null) AttachmentChip(pendingAttachment.name, removeAttachment)
         Row(Modifier.fillMaxWidth().imePadding().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
             Row(Modifier.weight(1f).heightIn(min = 56.dp).background(colors.surfaceContainer, RoundedCornerShape(28.dp)), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { picker.launch(arrayOf("application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "image/*")) }) { Icon(Icons.Outlined.AddCircleOutline, "Attach a CV", tint = colors.onSurfaceVariant) }
+                IconButton(onClick = { picker.launch(arrayOf("application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "image/*")) }) { Icon(painterResource(R.drawable.ms_add_circle), "Attach a CV", tint = colors.onSurfaceVariant) }
                 Box(Modifier.weight(1f).padding(end = 16.dp, top = 8.dp, bottom = 8.dp)) {
                     if (draft.isEmpty()) Text("Message Kwela", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                     BasicTextField(draft, setDraft, Modifier.fillMaxWidth().focusRequester(composerFocus), textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface), cursorBrush = SolidColor(colors.primary), maxLines = 5)
@@ -365,7 +348,7 @@ private fun ChatScreen(messages: List<ChatMessageEntity>, tasks: List<Applicatio
             }
             if (draft.isNotBlank() || pendingAttachment != null) {
                 Spacer(Modifier.width(8.dp))
-                FilledIconButton(onClick = send, Modifier.size(56.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.primaryContainer, contentColor = colors.onPrimaryContainer)) { Icon(Icons.AutoMirrored.Outlined.Send, "Send") }
+                FilledIconButton(onClick = send, Modifier.size(56.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.primaryContainer, contentColor = colors.onPrimaryContainer)) { Icon(painterResource(R.drawable.ms_send), "Send") }
             }
         }
     }
@@ -435,7 +418,7 @@ private fun DeliveryLine(delivery: Delivery, onOptions: () -> Unit) {
     val failed = delivery == Delivery.FAILED
     val tint = if (failed) colors.error else colors.onSurfaceVariant
     Row(Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-        if (failed) Icon(Icons.Outlined.ErrorOutline, null, Modifier.size(16.dp), tint = tint)
+        if (failed) Icon(painterResource(R.drawable.ms_error), null, Modifier.size(16.dp), tint = tint)
         Text(" ${MessageDelivery.line(delivery)} ", style = MaterialTheme.typography.labelMedium, color = tint)
         Text(
             "Check options", style = MaterialTheme.typography.labelMedium, textDecoration = TextDecoration.Underline,
@@ -443,7 +426,7 @@ private fun DeliveryLine(delivery: Delivery, onOptions: () -> Unit) {
             // A comfortable thumb target, not just the width of the words.
             modifier = Modifier.defaultMinSize(minHeight = 40.dp).clickable(onClick = onOptions).padding(horizontal = 4.dp).wrapContentHeight(Alignment.CenterVertically)
         )
-        if (delivery == Delivery.WAITING) Icon(Icons.Outlined.Schedule, "Waiting", Modifier.size(16.dp), tint = tint)
+        if (delivery == Delivery.WAITING) Icon(painterResource(R.drawable.ms_schedule), "Waiting", Modifier.size(16.dp), tint = tint)
     }
 }
 
@@ -456,25 +439,25 @@ private fun DeliveryOptionsSheet(delivery: Delivery, error: String?, resend: () 
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp)) {
             if (delivery == Delivery.FAILED) {
                 error?.let { Text(it, Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant) }
-                SheetRow(Icons.AutoMirrored.Outlined.Send, "Resend", resend)
-                SheetRow(Icons.Outlined.Delete, "Delete", delete)
+                SheetRow(R.drawable.ms_send, "Resend", resend)
+                SheetRow(R.drawable.ms_delete, "Delete", delete)
             } else {
                 Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp, color = colors.onSurfaceVariant)
                     Spacer(Modifier.width(24.dp))
                     Text("Sending…", style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant)
                 }
-                SheetRow(Icons.Outlined.Delete, "Stop sending and delete", delete)
+                SheetRow(R.drawable.ms_delete, "Stop sending and delete", delete)
             }
         }
     }
 }
 
 @Composable
-private fun SheetRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+private fun SheetRow(icon: Int, label: String, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().height(56.dp).clickable(onClick = onClick).padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, Modifier.size(24.dp), tint = colors.onSurface)
+        Icon(painterResource(icon), null, Modifier.size(24.dp), tint = colors.onSurface)
         Spacer(Modifier.width(24.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.onSurface)
     }
@@ -486,7 +469,7 @@ private fun AttachmentChip(name: String, remove: () -> Unit) {
     Surface(shape = RoundedCornerShape(16.dp), color = colors.surfaceContainerHigh, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp)) {
         Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("📎 $name", Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge, color = colors.onSurface)
-            IconButton(remove, Modifier.size(40.dp)) { Icon(painterResource(LucideIcons.X), "Remove file", Modifier.size(18.dp), tint = colors.onSurfaceVariant) }
+            IconButton(remove, Modifier.size(40.dp)) { Icon(painterResource(NavigationSymbols.X), "Remove file", Modifier.size(18.dp), tint = colors.onSurfaceVariant) }
         }
     }
 }

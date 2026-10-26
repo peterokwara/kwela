@@ -55,9 +55,9 @@
             <td>Our database. The source email address and IP address are not stored in this rate-limit table, but rate-limit rows do not yet have an automatic deletion job.</td>
         </tr>
         <tr>
-            <td><strong>Signing in with Google</strong> (your Google account email and name)</td>
-            <td>To sign you in without a code. Google confirms who you are and sends Kwela a signed message with your verified email and name. Kwela does not receive your Google password, contacts or other Google data.</td>
-            <td>Your email is stored with your account, like any other sign-in. Your name is kept on your phone only, to greet you in the app.</td>
+            <td><strong>Signing in with Google</strong> (your Google account email, name and profile photo)</td>
+            <td>To sign you in and show your profile. Google provides your verified email, name and, when available, a link to your profile photo. Kwela does not receive your Google password or contacts.</td>
+            <td>Your email is stored with your account. Your name and photo link are kept on your phone; the app loads the photo from Google. Signing out removes the saved link.</td>
         </tr>
         <tr>
             <td><strong>Usage statistics</strong> (which parts of Kwela are used: for example that a message was sent, a CV was written, a PDF was saved or shared, how long a reply took, and whether it failed)</td>

@@ -33,10 +33,7 @@ class MainActivityFlowTest {
     @Test
     fun demoOtpUnlocksChatAndBottomNavigationWorks() {
         compose.onNodeWithText("Welcome to Kwela").assertIsDisplayed()
-        compose.onNodeWithText("Use email instead").performClick()
-        compose.onNode(hasText("Email address", substring = true)).performTextInput("not-an-email")
-        compose.onNodeWithText("Continue").assertIsDisplayed().performClick()
-        compose.onNodeWithText("Enter a valid email address.").assertIsDisplayed()
+        compose.onNodeWithText("Use email instead").assertDoesNotExist()
 
         compose.activity.receiveSharedIntent(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"

@@ -27,6 +27,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     val documents: Flow<List<SavedDocumentEntity>> = dao.observeDocuments()
     val signedInEmail: Flow<String?> = appContext.preferencesDataStore.data.map { preferences -> preferences[EMAIL_KEY].takeIf { preferences[TOKEN_KEY] != null } }
     /** The name Google gave at sign-in, when the person signed in with Google. */
+    val photoUrl: Flow<String?> = appContext.preferencesDataStore.data.map { it[PHOTO_URL_KEY] }
     val displayName: Flow<String?> = appContext.preferencesDataStore.data.map { it[DISPLAY_NAME_KEY] }
     /** The opaque id the server gave this account for analytics, and whether it is a team or tester account. Null when signed out. */
     suspend fun analyticsIdentity(): Pair<String, Boolean>? = appContext.preferencesDataStore.data.first().let { preferences ->
@@ -72,7 +73,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
     suspend fun deleteDocument(id: String) = dao.deleteDocument(id)
 
     /** Stores a session and clears account-scoped local data when this phone changes accounts. */
-    suspend fun signIn(email: String, sessionToken: String, displayName: String? = null, analyticsId: String? = null, analyticsInternal: Boolean = false): Boolean {
+    suspend fun signIn(email: String, sessionToken: String, displayName: String? = null, analyticsId: String? = null, analyticsInternal: Boolean = false, photoUrl: String? = null): Boolean {
         val normalizedEmail = email.trim().lowercase()
         val previousOwner = appContext.preferencesDataStore.data.first()[DATA_OWNER_EMAIL_KEY]
         val changedAccount = previousOwner != normalizedEmail
@@ -96,13 +97,14 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
             preferences[TOKEN_KEY] = sessionToken
             // An email sign-in has no name, so it keeps the one Google gave for the same account, and drops it for a different one.
             if (!displayName.isNullOrBlank()) preferences[DISPLAY_NAME_KEY] = displayName else if (changedAccount) preferences.remove(DISPLAY_NAME_KEY)
+            if (!photoUrl.isNullOrBlank()) preferences[PHOTO_URL_KEY] = photoUrl else preferences.remove(PHOTO_URL_KEY)
             if (analyticsId != null) { preferences[ANALYTICS_ID_KEY] = analyticsId; preferences[ANALYTICS_INTERNAL_KEY] = analyticsInternal } else if (changedAccount) { preferences.remove(ANALYTICS_ID_KEY); preferences.remove(ANALYTICS_INTERNAL_KEY) }
         }
         return changedAccount
     }
 
     suspend fun signOut() {
-        appContext.preferencesDataStore.edit { it.remove(EMAIL_KEY); it.remove(TOKEN_KEY); it.remove(DISPLAY_NAME_KEY); it.remove(ANALYTICS_ID_KEY); it.remove(ANALYTICS_INTERNAL_KEY) }
+        appContext.preferencesDataStore.edit { it.remove(EMAIL_KEY); it.remove(TOKEN_KEY); it.remove(DISPLAY_NAME_KEY); it.remove(PHOTO_URL_KEY); it.remove(ANALYTICS_ID_KEY); it.remove(ANALYTICS_INTERNAL_KEY) }
     }
 
     /** The bearer token for the Kwela API, or null when signed out. */
@@ -193,6 +195,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
             preferences.remove(EMAIL_KEY)
             preferences.remove(TOKEN_KEY)
             preferences.remove(DISPLAY_NAME_KEY)
+            preferences.remove(PHOTO_URL_KEY)
             preferences.remove(ANALYTICS_ID_KEY)
             preferences.remove(ANALYTICS_INTERNAL_KEY)
             preferences.remove(PENDING_SHARE_KEY)
@@ -210,6 +213,7 @@ class KwelaRepository(context: Context, database: KwelaDatabase) {
 
     private companion object {
         val EMAIL_KEY = stringPreferencesKey("signed_in_email")
+        val PHOTO_URL_KEY = stringPreferencesKey("photo_url")
         val DISPLAY_NAME_KEY = stringPreferencesKey("display_name")
         val ANALYTICS_ID_KEY = stringPreferencesKey("analytics_id")
         val ANALYTICS_INTERNAL_KEY = booleanPreferencesKey("analytics_internal")

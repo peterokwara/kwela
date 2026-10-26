@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.kwela.R
 import app.kwela.BuildConfig
 import app.kwela.KwelaApplication
 import androidx.work.WorkInfo
@@ -121,6 +122,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch { repository.analyticsEnabled.collect { enabled -> mutableState.value = mutableState.value.copy(analyticsEnabled = enabled) } }
+        viewModelScope.launch { repository.photoUrl.collect { url -> mutableState.value = mutableState.value.copy(photoUrl = url) } }
         viewModelScope.launch { repository.displayName.collect { name -> mutableState.value = mutableState.value.copy(displayName = name) } }
         viewModelScope.launch { repository.failedReplies.collect { failed -> mutableState.value = mutableState.value.copy(failedReplies = failed) } }
         viewModelScope.launch {
@@ -187,10 +189,10 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** The person chose an account in Google's sign-in sheet. Kwela's server checks the token and starts a session. */
-    fun signInWithGoogle(idToken: String) {
+    fun signInWithGoogle(idToken: String, photoUrl: String?) {
         if (mutableState.value.isSigningIn) return
         mutableState.value = mutableState.value.copy(isSigningIn = true, loginError = null)
-        viewModelScope.launch { finishSignIn(api.googleSignIn(idToken)) }
+        viewModelScope.launch { finishSignIn(api.googleSignIn(idToken), photoUrl) }
     }
 
     /** Google's sheet could not give a token. Shown on the sign-in screen so the person can use email instead. */
@@ -199,19 +201,19 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Saves a session from either way of signing in, or shows why it did not work. */
-    private suspend fun finishSignIn(result: ApiResult) {
+    private suspend fun finishSignIn(result: ApiResult, photoUrl: String? = null) {
         val signedIn = (result as? ApiResult.Success)?.let { SignInReplyParser.parse(it.body) }
         if (signedIn == null) {
             mutableState.value = mutableState.value.copy(
                 isSigningIn = false,
-                loginError = (result as? ApiResult.Failure)?.message ?: "Kwela sent a reply the app couldn’t read. Please try again."
+                loginError = (result as? ApiResult.Failure)?.message?.replace("Use your email instead.", "Please try again later.") ?: "Kwela sent a reply the app couldn’t read. Please try again."
             )
             return
         }
         taskJob?.cancel()
         taskJob = null
         val draftBeforeSignIn = mutableState.value.draftText
-        val changedAccount = repository.signIn(signedIn.email, signedIn.token, signedIn.name, signedIn.analyticsId, signedIn.analyticsInternal)
+        val changedAccount = repository.signIn(signedIn.email, signedIn.token, signedIn.name, signedIn.analyticsId, signedIn.analyticsInternal, photoUrl)
         signedIn.analyticsId?.let { analytics.identify(it, signedIn.analyticsInternal || BuildConfig.DEBUG) }
         // A person who switched statistics off on this phone stays switched off on the server, on any sign-in.
         if (!repository.analyticsEnabled.first()) api.setAnalytics(signedIn.token, false)
@@ -538,7 +540,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         }
         val notification = if (Build.VERSION.SDK_INT >= 26) {
             android.app.Notification.Builder(context, channelId)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Kwela needs your review")
                 .setContentText("Your test application pack is ready.")
                 .setAutoCancel(true)
@@ -546,7 +548,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             @Suppress("DEPRECATION")
             NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Kwela needs your review")
                 .setContentText("Your test application pack is ready.")
                 .setAutoCancel(true)

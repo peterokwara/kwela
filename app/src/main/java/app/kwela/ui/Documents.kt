@@ -28,8 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -56,6 +54,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.kwela.R
 import app.kwela.KwelaApplication
 import app.kwela.analytics.AnalyticsEvents
 import app.kwela.data.DocumentPdf
@@ -76,10 +75,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private object DocIcons {
-    val Back = com.composables.icons.lucide.R.drawable.lucide_ic_arrow_left
-    val Download = com.composables.icons.lucide.R.drawable.lucide_ic_download
-    val Share = com.composables.icons.lucide.R.drawable.lucide_ic_share_2
-    val File = com.composables.icons.lucide.R.drawable.lucide_ic_file_text
+    val Back = R.drawable.ms_arrow_back
+    val Download = R.drawable.ms_download
+    val Share = R.drawable.ms_share
+    val File = R.drawable.ms_description
 }
 
 /** What a person can do with a document. The same three actions are used in the chat cards, the Files list and the preview page. */
@@ -330,7 +329,7 @@ private fun ChangeBar(line: String, cancel: () -> Unit, send: (String) -> Unit) 
                 Box(Modifier.width(4.dp).height(36.dp).background(colors.primary, RoundedCornerShape(2.dp)))
                 Spacer(Modifier.width(10.dp))
                 Text(line, Modifier.weight(1f), maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                IconButton(cancel, Modifier.size(44.dp)) { Icon(painterResource(com.composables.icons.lucide.R.drawable.lucide_ic_x), "Cancel", Modifier.size(18.dp), tint = colors.onSurfaceVariant) }
+                IconButton(cancel, Modifier.size(44.dp)) { Icon(painterResource(R.drawable.ms_close), "Cancel", Modifier.size(18.dp), tint = colors.onSurfaceVariant) }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.material3.TextField(
@@ -341,7 +340,7 @@ private fun ChangeBar(line: String, cancel: () -> Unit, send: (String) -> Unit) 
                     )
                 )
                 androidx.compose.material3.FilledIconButton(onClick = { send(note) }, Modifier.size(52.dp), enabled = note.isNotBlank()) {
-                    Icon(Icons.AutoMirrored.Outlined.Send, "Send")
+                    Icon(painterResource(R.drawable.ms_send), "Send")
                 }
             }
         }
