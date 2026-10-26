@@ -31,7 +31,8 @@ object GoogleSignIn {
     suspend fun requestToken(activity: Activity): GoogleSignInResult = request(activity, false, false)
 
     /** Offer previously authorised accounts first, then all accounts when none are available. */
-    suspend fun requestBottomSheet(activity: Activity): GoogleSignInResult {
+    suspend fun requestBottomSheet(activity: Activity, allAccounts: Boolean = false): GoogleSignInResult {
+        if (allAccounts) return request(activity, true, false)
         val authorised = request(activity, true, true)
         return if (authorised == GoogleSignInResult.NoCredential) request(activity, true, false) else authorised
     }

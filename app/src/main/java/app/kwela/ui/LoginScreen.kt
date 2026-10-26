@@ -1,8 +1,6 @@
 package app.kwela.ui
 
 import android.app.Activity
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -20,20 +19,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.BorderStroke
 import app.kwela.KwelaApplication
 import app.kwela.analytics.AnalyticsEvents
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,23 +36,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.foundation.layout.size
-import app.kwela.R
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -72,7 +50,6 @@ fun LoginScreen(
 ) {
     val colors = MaterialTheme.colorScheme
     val context = LocalContext.current
-    val buttonScale = LocalDensity.current.fontScale.coerceIn(1f, 1.5f)
     val scope = rememberCoroutineScope()
     val analytics = (context.applicationContext as KwelaApplication).analytics
     // True while Google's sheet is open, so a second tap cannot open another one.
@@ -84,7 +61,9 @@ fun LoginScreen(
             googleSheetOpen = true
             analytics.track(AnalyticsEvents.googleButtonClick)
             try {
-                when (val result = GoogleSignIn.requestToken(activity)) {
+                val sheet = GoogleSignIn.requestBottomSheet(activity, allAccounts = true)
+                val result = if (sheet == GoogleSignInResult.NoCredential) GoogleSignIn.requestToken(activity) else sheet
+                when (result) {
                     is GoogleSignInResult.Token -> onGoogleToken(result.idToken, result.photoUrl)
                     GoogleSignInResult.Dismissed, GoogleSignInResult.NoCredential -> Unit
                     is GoogleSignInResult.Failed -> onGoogleProblem(result.message)
@@ -124,14 +103,12 @@ fun LoginScreen(
         )
         Spacer(Modifier.height(24.dp))
         if (GoogleSignIn.available) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Image(
-                    painter = painterResource(R.drawable.google_sign_in),
-                    contentDescription = "Sign in with Google",
-                    modifier = Modifier.size(width = 180.dp * buttonScale, height = 48.dp * buttonScale)
-                        .clickable(enabled = !working && !googleSheetOpen, role = Role.Button) { signInWithGoogle() }
-                )
-            }
+            Button(
+                onClick = { signInWithGoogle() },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                enabled = !working && !googleSheetOpen,
+                shape = CircleShape
+            ) { Text("Sign in with Google", style = MaterialTheme.typography.titleMedium) }
         } else {
             Text("Google sign-in is unavailable. Please try again later.", color = colors.error)
         }
