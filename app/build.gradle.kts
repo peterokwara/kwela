@@ -45,6 +45,8 @@ android {
         buildConfigField("String", "TERMS_URL", link("kwela.termsUrl"))
         buildConfigField("String", "SUPPORT_EMAIL", link("kwela.supportEmail"))
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", link("kwela.googleWebClientId"))
+        buildConfigField("String", "POSTHOG_API_KEY", link("kwela.posthogApiKey"))
+        buildConfigField("String", "POSTHOG_HOST", link("kwela.posthogHost"))
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -93,6 +95,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation("com.posthog:posthog-android:3.72.9")
     implementation("androidx.credentials:credentials:1.5.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")

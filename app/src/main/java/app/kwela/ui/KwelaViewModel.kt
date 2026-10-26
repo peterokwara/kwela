@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.kwela.BuildConfig
 import app.kwela.KwelaApplication
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -16,6 +17,7 @@ import app.kwela.data.AttachmentReader
 import app.kwela.data.ReplyScheduler
 import app.kwela.data.ReplyWorker
 import app.kwela.data.remote.ApiResult
+import app.kwela.analytics.AnalyticsEvents
 import app.kwela.domain.AttachmentPolicy
 import app.kwela.domain.CareerReplyParser
 import app.kwela.domain.ChangeRequest
@@ -68,6 +70,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
     private var taskJob: Job? = null
     private val finishLock = Mutex()
     private val sendLock = Mutex()
+    private val analytics get() = getApplication<KwelaApplication>().analytics
 
     init {
         restoreDraft()
@@ -117,6 +120,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                 mutableState.value = mutableState.value.copy(isReplying = info != null, replyIsSlow = info != null && ReplyWorker.TAG_SLOW in info.tags, pendingMessages = waitingAll)
             }
         }
+        viewModelScope.launch { repository.analyticsEnabled.collect { enabled -> mutableState.value = mutableState.value.copy(analyticsEnabled = enabled) } }
         viewModelScope.launch { repository.displayName.collect { name -> mutableState.value = mutableState.value.copy(displayName = name) } }
         viewModelScope.launch { repository.failedReplies.collect { failed -> mutableState.value = mutableState.value.copy(failedReplies = failed) } }
         viewModelScope.launch {
@@ -207,7 +211,8 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         taskJob?.cancel()
         taskJob = null
         val draftBeforeSignIn = mutableState.value.draftText
-        val changedAccount = repository.signIn(signedIn.email, signedIn.token, signedIn.name)
+        val changedAccount = repository.signIn(signedIn.email, signedIn.token, signedIn.name, signedIn.analyticsId, signedIn.analyticsInternal)
+        signedIn.analyticsId?.let { analytics.identify(it, signedIn.analyticsInternal || BuildConfig.DEBUG) }
         mutableState.value = mutableState.value.copy(
             isSigningIn = false,
             otpRequested = false,
@@ -235,6 +240,8 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Sends a message to the writer without touching the person's current draft. */
     private fun sendText(text: String, attachment: PendingAttachment? = null) {
+        // Only the fact that a message was sent is counted, never what it said.
+        analytics.track(AnalyticsEvents.messageSend, mapOf("has_attachment" to (attachment != null)))
         val slow = ReplyPacing.isSlow(text, attachment != null)
         mutableState.value = mutableState.value.copy(pendingReview = null, downloadGate = null, isReplying = true, replyIsSlow = slow)
         viewModelScope.launch {
@@ -288,6 +295,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
                 if (!force && messageId !in mutableState.value.failedReplies) return@withLock
                 val target = repository.messages.first().firstOrNull { it.id == messageId && it.role == "USER" } ?: return@withLock
                 val slow = ReplyPacing.isSlow(target.content, target.attachmentUri != null)
+                analytics.track(AnalyticsEvents.messageResend)
                 // Clear "Not sent" at once, so the person sees something happen.
                 repository.clearReplyFailed(messageId)
                 mutableState.value = mutableState.value.copy(isReplying = true, replyIsSlow = slow, failedReplies = mutableState.value.failedReplies - messageId)
@@ -307,6 +315,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             sendLock.withLock {
                 val all = repository.messages.first()
                 if (all.firstOrNull { it.id == messageId }?.role != "USER") return@withLock
+                analytics.track(AnalyticsEvents.messageDelete)
                 all.filter { it.id == messageId || it.id.startsWith("${LocalMessages.PREFIX}$messageId-") }.forEach { repository.deleteMessage(it.id) }
                 repository.clearReplyFailed(messageId)
                 mutableState.value = mutableState.value.copy(pendingMessages = mutableState.value.pendingMessages - messageId)
@@ -439,6 +448,12 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setThemeMode(mode: ThemeMode) { viewModelScope.launch { repository.setThemeMode(mode) } }
 
+    /** The Settings switch for usage statistics. Turning it off stops every event from this phone at once. */
+    fun setAnalyticsEnabled(enabled: Boolean) {
+        analytics.setEnabled(enabled)
+        viewModelScope.launch { repository.setAnalyticsEnabled(enabled) }
+    }
+
     fun setNotificationsEnabled(enabled: Boolean) { viewModelScope.launch { repository.setNotificationsEnabled(enabled) } }
 
     fun signOut() {
@@ -446,6 +461,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             WorkManager.getInstance(getApplication<Application>()).cancelUniqueWork(ReplyWorker.UNIQUE)
             repository.sessionToken()?.let { api.signOut(it) }
             repository.signOut()
+            analytics.reset()
             mutableState.value = mutableState.value.copy(screen = AppScreen.CHAT)
         }
     }
@@ -457,6 +473,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
             val remote = if (token != null) api.deleteAccount(token) else null
             taskJob?.cancel()
             repository.clearUserData()
+            analytics.reset()
             mutableState.value = KwelaUiState(
                 isRestoring = false,
                 message = if (remote is ApiResult.Failure) "Removed from this phone. Kwela couldn’t be reached to delete your account, so try again later or use the deletion page on our website." else null

@@ -1,5 +1,6 @@
 import { createRouter } from "./router.ts";
 import { createAuthService } from "./lib/server/services/authService.ts";
+import { analyticsFromEnv, internalAccountIds } from "./lib/server/services/analyticsFactory.ts";
 import { createGoogleTokenVerifier } from "./lib/server/services/googleIdToken.ts";
 import { D1AuthStoreService, type AuthDatabase } from "./lib/server/services/d1AuthStoreService.ts";
 import { AllowlistedTestOtpMailer, CloudflareOtpMailer, LogOtpMailer, SelectingOtpMailer, ZeptoMailOtpMailer, type IEmailSender } from "./lib/server/services/otpMailers.ts";
@@ -63,6 +64,14 @@ export interface Env {
      * OAuth web client id Google signs sign-in tokens for. Google sign-in is off while this is empty.
      */
     GOOGLE_WEB_CLIENT_ID?: string;
+    /**
+     * PostHog project key for product analytics. Analytics is off while this is empty.
+     */
+    POSTHOG_API_KEY?: string;
+    /**
+     * PostHog host. Events go straight there, with no reverse proxy.
+     */
+    POSTHOG_HOST?: string;
     USAGE_CAP_USD?: string;
     GLOBAL_USAGE_CAP_USD?: string;
     MAX_REQUESTS_PER_MINUTE?: string;
@@ -104,7 +113,7 @@ function googleVerifierFor(clientId: string) {
 }
 
 export default {
-    async fetch(request: Request, env: Env): Promise<Response> {
+    async fetch(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
         if (!env.AUTH_SECRET) return Response.json({ message: "Kwela is not set up yet." }, { status: 503 });
         const testers = (env.AUTH_TEST_EMAILS ?? "").split(",").map((address) => address.trim().toLowerCase()).filter(Boolean);
         const testCode = env.AUTH_TEST_CODE?.trim() || undefined;
@@ -116,6 +125,7 @@ export default {
             : env.EMAIL && env.EMAIL_FROM
               ? new CloudflareOtpMailer(env.EMAIL, env.EMAIL_FROM)
               : null;
+        const analytics = analyticsFromEnv(env);
         const auth = createAuthService({
             store: new D1AuthStoreService(env.DB as unknown as AuthDatabase),
             mailer: testCode
@@ -123,6 +133,9 @@ export default {
                 : new SelectingOtpMailer(realMailer, new LogOtpMailer(), testers),
             secret: env.AUTH_SECRET,
             testCode,
+            analytics,
+            internalIds: () => internalAccountIds(env),
+            defer: (work) => context.waitUntil(work),
             googleVerifier: env.GOOGLE_WEB_CLIENT_ID?.trim() ? googleVerifierFor(env.GOOGLE_WEB_CLIENT_ID.trim()) : undefined
         });
         const router = createRouter({
@@ -138,6 +151,7 @@ export default {
             },
             profiles: new D1CandidateProfileStoreService(env.DB as unknown as CandidateProfileDatabase),
             chatRuns: new D1ChatRunService(env.DB, env.RUN_INPUTS, env.CHAT_RUNS),
+            track: (ownerId, event, properties) => context.waitUntil(analytics.capture(ownerId, event, properties)),
             reserveRender: (ownerId) =>
                 new D1UsageLimitService(env.DB as unknown as UsageDatabase, readUsageConfig(env).limits).reserveRender(ownerId),
             renderPdf: (html) =>

@@ -68,7 +68,10 @@ private const val LICENSES = "AndroidX, Jetpack Compose, Material 3, Room and Da
 /** Full-screen settings, laid out as a few big cards: only what matters in Kwela. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(notifications: Boolean, toggleNotifications: (Boolean) -> Unit, themeMode: ThemeMode, setThemeMode: (ThemeMode) -> Unit, close: () -> Unit) {
+fun SettingsScreen(
+    notifications: Boolean, toggleNotifications: (Boolean) -> Unit, analyticsEnabled: Boolean, toggleAnalytics: (Boolean) -> Unit,
+    themeMode: ThemeMode, setThemeMode: (ThemeMode) -> Unit, close: () -> Unit
+) {
     BackHandler(onBack = close)
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
@@ -104,6 +107,16 @@ fun SettingsScreen(notifications: Boolean, toggleNotifications: (Boolean) -> Uni
                     }
                     Spacer(Modifier.width(12.dp))
                     Switch(notifications, setNotifications)
+                }
+            }
+            Surface(onClick = { toggleAnalytics(!analyticsEnabled) }, shape = RoundedCornerShape(28.dp), color = colors.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Usage statistics", style = MaterialTheme.typography.titleLarge, color = colors.onSurface)
+                        Text("Help improve Kwela by counting which parts are used. Never your CV, messages or files.", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(analyticsEnabled, toggleAnalytics)
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

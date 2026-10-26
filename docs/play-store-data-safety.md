@@ -8,7 +8,7 @@ Current draft answers for the closed-test build. Recheck this file and the Play 
 | --- | --- |
 | Does the app collect or share required user data types? | Yes |
 | Is all user data encrypted in transit? | Yes. The app uses HTTPS for API requests. |
-| Account creation method | Email address and one-time code |
+| Account creation method | Sign in with Google, or email address and one-time code |
 | Account deletion URL | `https://kwela-site.ojakaapeter711.workers.dev/delete-account` |
 | Privacy policy URL | `https://kwela-site.ojakaapeter711.workers.dev/privacy` |
 | Can users request deletion of individual data types without deleting their account? | No |
@@ -28,8 +28,8 @@ For this form, transfers to Cloudflare and OpenAI are treated as service-provide
 | Other in-app messages | Yes | No | No | Optional | App functionality |
 | Photos | Yes | No | No | Optional | App functionality |
 | Files and docs | Yes | No | No | Optional | App functionality |
-| App interactions | Yes | No | No | Required | App functionality, fraud prevention/security |
-| Device or other IDs | Yes | No | No | Required | Fraud prevention/security |
+| App interactions | Yes | No | No | Required | App functionality, fraud prevention/security, analytics |
+| Device or other IDs | Yes | No | No | Required | Fraud prevention/security, analytics (PostHog's anonymous install ID) |
 
 ## Handling notes
 
@@ -38,11 +38,14 @@ For this form, transfers to Cloudflare and OpenAI are treated as service-provide
 - The account email and a keyed code hash are stored in D1. Codes expire after 10 minutes and are invalidated on use. Unused expired code rows may remain until replaced or account deletion.
 - Sign-in rate-limit rows contain keyed hashes of email/IP values and counts, not raw values. The current implementation has no automatic cleanup job for those rows.
 - Closed-test sign-in uses a reusable, non-expiring fixed code only for addresses in `AUTH_TEST_EMAILS`. A tester requests the code in the app, which displays it only after the Worker accepts the allow-listed address. No email is sent in this test mode. Remove `AUTH_TEST_CODE` and configure a verified email sender before public production.
-- Not collected: precise or approximate location, contacts, calendar, health, financial information, audio, video, advertising ID, or analytics/crash diagnostics from an SDK.
+- Usage statistics: the app uses the PostHog Android SDK (US cloud, no reverse proxy) and the Worker sends server events to PostHog. Events are counts and kinds only (see `docs/analytics.md`), linked to a random account ID. They never contain CV text, messages, file names, names or emails. PostHog receives the phone's IP address with each event. Users can switch usage statistics off in Settings. Treated as service-provider processing on Kwela's behalf, like Cloudflare and OpenAI. Approximate location (country, from IP) is derived by PostHog, so declare "Approximate location" if the form asks about IP-derived location.
+- Sign in with Google: the app receives a signed ID token with the verified email and name. The name is kept on the phone only. No other Google data is requested.
+- Not collected: precise location, contacts, calendar, health, financial information, audio, video, advertising ID, or crash diagnostics from an SDK.
 
 ## Other Play Console declarations still to complete
 
 - Sign-in details for reviewers. Provide the allow-listed reviewer address and private-test code.
 - Target audience and content. The intended audience is 18 and over.
 - Save and submit the Data safety declaration for review after the remaining app-content declaration is complete.
+- Update the Data safety form in Play Console to match this file before the next release (analytics purpose on App interactions and Device or other IDs, and Google sign-in as an account method).
 - Closed-test release and reviewer access are staged separately; tester addresses must be added to the Worker allow-list before those people can sign in.

@@ -230,5 +230,9 @@ export type ChatRunWorkflowEnv = {
     MAX_REQUESTS_PER_MINUTE?: string;
     INPUT_PRICE_PER_MILLION_USD?: string;
     OUTPUT_PRICE_PER_MILLION_USD?: string;
+    POSTHOG_API_KEY?: string;
+    POSTHOG_HOST?: string;
+    AUTH_SECRET?: string;
+    AUTH_TEST_EMAILS?: string;
 };
 

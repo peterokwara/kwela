@@ -30,4 +30,20 @@ class SignInReplyParserTest {
     fun aBlankNameIsTreatedAsNoName() {
         assertNull(SignInReplyParser.parse("""{"token":"abc123","email":"a@example.test","name":"  "}""")?.name)
     }
+
+    @Test
+    fun readsTheAnalyticsIdAndWhetherTheAccountIsInternal() {
+        val reply = SignInReplyParser.parse("""{"token":"t","email":"a@example.test","analyticsId":"abc123","analyticsInternal":true}""")
+
+        assertEquals("abc123", reply?.analyticsId)
+        assertEquals(true, reply?.analyticsInternal)
+    }
+
+    @Test
+    fun anOlderReplyWithoutThemStillSignsInAndIsNotInternal() {
+        val reply = SignInReplyParser.parse("""{"token":"t","email":"a@example.test"}""")
+
+        assertNull(reply?.analyticsId)
+        assertEquals(false, reply?.analyticsInternal)
+    }
 }

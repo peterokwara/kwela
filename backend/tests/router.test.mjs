@@ -67,6 +67,10 @@ function fakes() {
             calls.renders.push(ownerId);
             return calls.renderDecision;
         },
+        track(ownerId, event, properties) {
+            calls.tracked = calls.tracked ?? [];
+            calls.tracked.push({ ownerId, event, properties });
+        },
         async renderPdf() {
             return new Response("%PDF-1.7", { headers: { "content-type": "application/pdf" } });
         }
@@ -246,4 +250,18 @@ test("Google sign-in refuses a missing or oversized token before asking Google",
 test("Google sign-in only accepts POST", async () => {
     const { router } = fakes();
     assert.equal((await router(request("/auth/google", { auth: null }))).status, 405);
+});
+
+test("a PDF render is recorded with its type and nothing from the document", async () => {
+    const { router, calls } = fakes();
+    const response = await router(request("/api/documents/pdf", { method: "POST", body: { type: "cover_letter", document: goodLetter } }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls.tracked, [{ ownerId: "acct-a", event: "document:pdf_render", properties: { document_type: "cover_letter" } }]);
+});
+
+test("a refused or failed render is not recorded as a render", async () => {
+    const { router, calls } = fakes();
+    calls.renderDecision = { allowed: false, status: 429, message: "Slow down a little." };
+    await router(request("/api/documents/pdf", { method: "POST", body: { type: "cover_letter", document: goodLetter } }));
+    assert.equal(calls.tracked, undefined);
 });

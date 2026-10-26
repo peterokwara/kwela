@@ -218,7 +218,7 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                     if (previewDocument != null) {
                         DocumentPreviewScreen(previewDocument, docActions, changeRequest = { line, note -> previewId = null; vm.sendChangeRequest(previewDocument.title, line, note) }) { previewId = null }
                     } else if (state.screen == AppScreen.PROFILE) {
-                        SettingsScreen(state.notificationsEnabled, vm::setNotificationsEnabled, state.themeMode, vm::setThemeMode) { vm.setScreen(AppScreen.CHAT) }
+                        SettingsScreen(state.notificationsEnabled, vm::setNotificationsEnabled, state.analyticsEnabled, vm::setAnalyticsEnabled, state.themeMode, vm::setThemeMode) { vm.setScreen(AppScreen.CHAT) }
                     } else MainShell(state.screen, vm::setScreen, state.email.orEmpty(), state.displayName, { showProfile = true }) {
                         when (state.screen) {
                             AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile, state.pendingAttachment, state.isReplying, state.replyIsSlow, vm::removeAttachment, vm::retryReply, state.failedReplies, state.pendingMessages, vm::resendMessage, vm::deleteMessage, state.documents, docActions, state.pendingReview, state.downloadGate, vm::answerReview, vm::addMissingDetails, vm::downloadAnyway)

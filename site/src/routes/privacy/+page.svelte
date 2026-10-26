@@ -55,19 +55,35 @@
             <td>Our database. The source email address and IP address are not stored in this rate-limit table, but rate-limit rows do not yet have an automatic deletion job.</td>
         </tr>
         <tr>
+            <td><strong>Signing in with Google</strong> (your Google account email and name)</td>
+            <td>To sign you in without a code. Google confirms who you are and sends Kwela a signed message with your verified email and name. Kwela does not receive your Google password, contacts or other Google data.</td>
+            <td>Your email is stored with your account, like any other sign-in. Your name is kept on your phone only, to greet you in the app.</td>
+        </tr>
+        <tr>
+            <td><strong>Usage statistics</strong> (which parts of Kwela are used: for example that a message was sent, a CV was written, a PDF was saved or shared, how long a reply took, and whether it failed)</td>
+            <td>To find out what works and what breaks, so we can improve Kwela. These records never contain your CV, your messages, your files, your name or your email. They are linked to a random account ID, not to your identity.</td>
+            <td>PostHog, in the United States. PostHog also receives your phone's IP address with each record and uses it to work out your country. You can turn usage statistics off at any time in Settings, and the app then stops sending them. Deleting your account stops further records, and you can ask us to erase the records already linked to your account ID.</td>
+        </tr>
+        <tr>
             <td><strong>Technical data</strong> (such as your IP address and request details)</td>
             <td>Our hosting provider handles these to deliver the service and keep it secure. We do not use them to profile you.</td>
             <td>Our hosting provider.</td>
         </tr>
     </tbody>
 </table>
-<p>We do not use advertising or analytics tools in the app, and we do not sell your information.</p>
+<p>We do not use advertising tools, we do not sell your information, and the only analytics we use are the usage statistics described above.</p>
 
 <h2>Service providers</h2>
 <p>These providers process information for us so Kwela can work. Google Play's Data safety rules treat transfers to service providers acting on a developer's behalf as collection, not sharing.</p>
 <ul>
     <li>
         <strong>OpenAI</strong> receives your messages and attached files so its AI models can write replies and documents. OpenAI processes API data for the service and says API data is not used to train its models by default. See its <a href="https://developers.openai.com/api/docs/guides/your-data" rel="noreferrer">API data controls</a>.
+    </li>
+    <li>
+        <strong>PostHog</strong> receives the usage statistics described above, and the IP address that comes with them, so we can see how Kwela is used. It does not receive your CV, messages or files. See <a href="https://posthog.com/privacy" rel="noreferrer">PostHog's privacy policy</a>.
+    </li>
+    <li>
+        <strong>Google</strong> checks your account when you choose to sign in with Google. See <a href="https://policies.google.com/privacy" rel="noreferrer">Google's privacy policy</a>.
     </li>
     <li>
         <strong>Cloudflare</strong> hosts Kwela's servers and database. Your requests and account data pass through its network. The closed-test code is returned only to allow-listed accounts in the app; no email service currently receives it.

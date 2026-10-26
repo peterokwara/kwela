@@ -5,6 +5,9 @@ import { createChatPostHandler } from "./chatPostHandlerService.ts";
 import { createOpenAICareerAssistantService } from "./openAICareerAssistantService.ts";
 import { DEFAULT_MODEL_PRICES, DEFAULT_USAGE_LIMITS, positiveNumber } from "./usagePolicy.ts";
 import type { ChatRunWorkflowEnv } from "./d1ChatRunService.ts";
+import { analyticsFromEnv } from "./analyticsFactory.ts";
+import { describeReplyForAnalytics } from "./analytics.ts";
+import { ANALYTICS_EVENTS } from "./analyticsEvents.ts";
 
 interface RunRow {
     owner_id: string;
@@ -36,7 +39,21 @@ export class ChatRunWorkflow extends WorkflowEntrypoint<ChatRunWorkflowEnv, { ru
                 await this.env.DB.prepare("UPDATE chat_runs SET status = 'FAILED', error_message = ?, input_expires_at = ?, updated_at = ? WHERE id = ?")
                     .bind(message, Date.now() + 24 * 60 * 60 * 1000, Date.now(), runId)
                     .run();
+                await this.track(runId, ANALYTICS_EVENTS.runFail, { failure_kind: error instanceof NonRetryableError ? "rejected" : "error" });
             });
+        }
+    }
+
+    /** Records a product event for the run's owner. It carries timing and counts only, never the person's words, and can never fail the run. */
+    private async track(runId: string, event: string, properties: Record<string, unknown>): Promise<void> {
+        try {
+            const row = await this.env.DB.prepare("SELECT owner_id, created_at, attempt_count FROM chat_runs WHERE id = ?")
+                .bind(runId)
+                .first<{ owner_id: string; created_at: number; attempt_count: number }>();
+            if (!row) return;
+            await analyticsFromEnv(this.env).capture(row.owner_id, event, { ...properties, duration_ms: Date.now() - row.created_at, attempt_count: row.attempt_count });
+        } catch (cause) {
+            console.warn("Kwela could not record an analytics event:", cause);
         }
     }
 
@@ -47,6 +64,8 @@ export class ChatRunWorkflow extends WorkflowEntrypoint<ChatRunWorkflowEnv, { ru
         await this.env.DB.prepare("UPDATE chat_runs SET status = 'COMPLETE', reply_json = ?, reply_expires_at = NULL, acknowledged_at = NULL, error_message = NULL, input_expires_at = NULL, updated_at = ? WHERE id = ?")
             .bind(replyJson, Date.now(), runId)
             .run();
+        const summary = describeReplyForAnalytics(replyJson);
+        if (summary) await this.track(runId, ANALYTICS_EVENTS.applicationGenerate, summary);
         const row = await this.env.DB.prepare("SELECT input_key FROM chat_runs WHERE id = ?").bind(runId).first<{ input_key: string }>();
         if (row?.input_key) {
             try {

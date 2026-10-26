@@ -26,6 +26,7 @@ data class KwelaUiState(
     val tasks: List<ApplicationTaskEntity> = emptyList(),
     val documents: List<SavedDocumentEntity> = emptyList(),
     val notificationsEnabled: Boolean = true,
+    val analyticsEnabled: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val loginError: String? = null,
     val pendingAttachment: PendingAttachment? = null,

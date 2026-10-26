@@ -1,5 +1,7 @@
 import type { IAuthStore, IResolvedSession } from "../../models/services/IAuthStore.ts";
 import type { IOtpMailer } from "../../models/services/IOtpMailer.ts";
+import type { IAnalytics } from "./analytics.ts";
+import { ANALYTICS_EVENTS } from "./analyticsEvents.ts";
 import type { IGoogleIdentity } from "./googleIdToken.ts";
 
 /**
@@ -41,6 +43,18 @@ export interface IAuthServiceOptions {
      */
     googleVerifier?: (idToken: string) => Promise<IGoogleIdentity | null>;
     /**
+     * Records sign-up and sign-in events. Omit to record nothing.
+     */
+    analytics?: IAnalytics;
+    /**
+     * The account ids of the team and testers, so the phone can tag their events as internal.
+     */
+    internalIds?: () => Promise<ReadonlySet<string>>;
+    /**
+     * Lets a Worker finish sending events after the response has gone. Without it events are sent in the background and not awaited.
+     */
+    defer?: (work: Promise<unknown>) => void;
+    /**
      * Clock in milliseconds since the epoch.
      */
     now?: () => number;
@@ -74,7 +88,7 @@ async function hashCode(secret: string, email: string, code: string): Promise<st
 }
 
 /** Computes a stable opaque account id so deleting and recreating an account cannot reset usage caps. */
-async function accountIdForEmail(secret: string, email: string): Promise<string> {
+export async function accountIdForEmail(secret: string, email: string): Promise<string> {
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     return toHex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`account:${email}`)));
 }
@@ -125,6 +139,23 @@ export function createAuthService(options: IAuthServiceOptions) {
     const testCode = options.testCode?.trim() || undefined;
     if (testCode && !/^\d{6}$/.test(testCode)) throw new Error("The private test sign-in code must contain six digits.");
     const now = options.now ?? Date.now;
+    const defer = options.defer ?? ((work: Promise<unknown>) => void work.catch(() => undefined));
+
+    async function isInternal(accountId: string): Promise<boolean> {
+        try {
+            return options.internalIds ? (await options.internalIds()).has(accountId) : false;
+        } catch {
+            return false;
+        }
+    }
+
+    /** Records a sign-in, and a sign-up the first time an account is seen. Events carry the opaque account id, never an email or a name. */
+    function recordSignIn(account: { id: string; createdAt: number }, time: number, method: "email_code" | "google"): void {
+        const analytics = options.analytics;
+        if (!analytics) return;
+        if (account.createdAt === time) defer(analytics.capture(account.id, ANALYTICS_EVENTS.userCreate, { sign_in_method: method }).catch(() => undefined));
+        defer(analytics.capture(account.id, ANALYTICS_EVENTS.userSignIn, { sign_in_method: method }).catch(() => undefined));
+    }
 
     return {
         /** Emails a six-digit code to the address.
@@ -182,7 +213,7 @@ export function createAuthService(options: IAuthServiceOptions) {
          * @param rawCode Code as typed.
          * @returns A bearer token and the address, or a failure.
          */
-        async verify(rawEmail: string, rawCode: string): Promise<{ ok: true; token: string; email: string } | AuthFailure> {
+        async verify(rawEmail: string, rawCode: string): Promise<{ ok: true; token: string; email: string; analyticsId: string; analyticsInternal: boolean } | AuthFailure> {
             const email = normalizeEmail(rawEmail);
             const code = rawCode.trim();
             const time = now();
@@ -197,7 +228,8 @@ export function createAuthService(options: IAuthServiceOptions) {
             const account = await store.findOrCreateAccount(email, await accountIdForEmail(secret, email), time);
             const token = randomToken();
             await store.createSession({ tokenHash: await sha256Hex(token), accountId: account.id, createdAt: time });
-            return { ok: true, token, email };
+            recordSignIn(account, time, "email_code");
+            return { ok: true, token, email, analyticsId: account.id, analyticsInternal: await isInternal(account.id) };
         },
 
         /** Signs a person in with a Google ID token from the phone. Google has already checked who they are, so no code is needed.
@@ -205,7 +237,7 @@ export function createAuthService(options: IAuthServiceOptions) {
          * @param sourceIp Address of the caller, for rate limiting.
          * @returns A bearer token, the verified address and name, or a failure.
          */
-        async signInWithGoogle(idToken: string, sourceIp?: string): Promise<{ ok: true; token: string; email: string; name: string } | AuthFailure> {
+        async signInWithGoogle(idToken: string, sourceIp?: string): Promise<{ ok: true; token: string; email: string; name: string; analyticsId: string; analyticsInternal: boolean } | AuthFailure> {
             if (!options.googleVerifier) return { ok: false, status: 503, message: "Google sign-in isn’t available right now. Use your email instead." };
             const time = now();
             const ip = sourceIp?.trim();
@@ -217,7 +249,8 @@ export function createAuthService(options: IAuthServiceOptions) {
             const account = await store.findOrCreateAccount(identity.email, await accountIdForEmail(secret, identity.email), time);
             const token = randomToken();
             await store.createSession({ tokenHash: await sha256Hex(token), accountId: account.id, createdAt: time });
-            return { ok: true, token, email: identity.email, name: identity.name };
+            recordSignIn(account, time, "google");
+            return { ok: true, token, email: identity.email, name: identity.name, analyticsId: account.id, analyticsInternal: await isInternal(account.id) };
         },
 
         /** Finds the signed-in person for a bearer token.
@@ -243,6 +276,7 @@ export function createAuthService(options: IAuthServiceOptions) {
          */
         async deleteAccount(accountId: string, email: string): Promise<void> {
             await store.deleteAccountData(accountId, email);
+            if (options.analytics) defer(options.analytics.capture(accountId, ANALYTICS_EVENTS.userDelete).catch(() => undefined));
         }
     };
 }

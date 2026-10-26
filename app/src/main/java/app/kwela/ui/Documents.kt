@@ -57,6 +57,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.kwela.KwelaApplication
+import app.kwela.analytics.AnalyticsEvents
 import app.kwela.data.DocumentPdf
 import app.kwela.data.local.SavedDocumentEntity
 import app.kwela.domain.DocBlock
@@ -113,6 +114,7 @@ fun rememberDocumentActions(open: (SavedDocumentEntity) -> Unit): DocumentAction
 
     val download: (SavedDocumentEntity) -> Unit = { document ->
         if (busyId == null) scope.launch {
+            app.analytics.track(AnalyticsEvents.pdfDownload, mapOf("document_type" to (document.kind ?: "other")))
             busyId = document.id
             try {
                 val file = pdf.make(document)
@@ -143,6 +145,7 @@ fun rememberDocumentActions(open: (SavedDocumentEntity) -> Unit): DocumentAction
 
     val share: (SavedDocumentEntity) -> Unit = { document ->
         if (busyId == null) scope.launch {
+            app.analytics.track(AnalyticsEvents.pdfShare, mapOf("document_type" to (document.kind ?: "other")))
             busyId = document.id
             try {
                 val file = pdf.make(document)
@@ -164,7 +167,11 @@ fun rememberDocumentActions(open: (SavedDocumentEntity) -> Unit): DocumentAction
             }
         }
     }
-    return remember(busyId, open) { DocumentActions(open, download, share, busyId) }
+    val trackedOpen: (SavedDocumentEntity) -> Unit = { document ->
+        app.analytics.track(AnalyticsEvents.fileOpen, mapOf("document_type" to (document.kind ?: "other")))
+        open(document)
+    }
+    return remember(busyId, open) { DocumentActions(trackedOpen, download, share, busyId) }
 }
 
 /** A finished document shown as a card in the chat, like an attachment in a messaging app. */

@@ -22,6 +22,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
+import app.kwela.KwelaApplication
+import app.kwela.analytics.AnalyticsEvents
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -65,12 +67,14 @@ fun LoginScreen(
     val focus = LocalFocusManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val analytics = (context.applicationContext as KwelaApplication).analytics
     var code by rememberSaveable { mutableStateOf("") }
     var emailFormOpen by rememberSaveable { mutableStateOf(!GoogleSignIn.available) }
     // True while Google's sheet is open, so a second tap cannot open another one.
     var googleSheetOpen by remember { mutableStateOf(false) }
     val requestCode = { focus.clearFocus(); request() }
     val signInWithGoogle = {
+        analytics.track(AnalyticsEvents.googleButtonClick)
         val activity = context as? Activity
         if (activity != null && !working && !googleSheetOpen) scope.launch {
             googleSheetOpen = true
@@ -120,7 +124,7 @@ fun LoginScreen(
                     Button(onClick = requestCode, Modifier.fillMaxWidth().height(52.dp), enabled = !working, shape = CircleShape) { Text(if (working) "Sending code…" else "Continue") }
                 }
             } else {
-                TextButton(onClick = { emailFormOpen = true }, Modifier.fillMaxWidth().height(52.dp)) { Text("Use email instead") }
+                TextButton(onClick = { analytics.track(AnalyticsEvents.emailButtonClick); emailFormOpen = true }, Modifier.fillMaxWidth().height(52.dp)) { Text("Use email instead") }
             }
         } else {
             OutlinedTextField(code, { if (it.length <= 6 && it.all(Char::isDigit)) code = it }, Modifier.fillMaxWidth(), label = { Text("6-digit code") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { if (code.length == 6) { focus.clearFocus(); verify(code) } }))

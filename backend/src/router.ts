@@ -4,6 +4,7 @@ import {
 } from "./lib/features/careergo/classicDocumentHtmlService.ts";
 import { careergoCoverLetterSchema } from "./lib/models/careergo/ICareergoCoverLetter.ts";
 import { careergoResumeSchema } from "./lib/models/careergo/ICareergoResume.ts";
+import { ANALYTICS_EVENTS } from "./lib/server/services/analyticsEvents.ts";
 import { MAX_PDF_BODY_CHARS, type UsageDecision } from "./lib/server/services/usagePolicy.ts";
 import type { IResolvedSession } from "./lib/models/services/IAuthStore.ts";
 import type { ICandidateProfileStoreService } from "./lib/models/services/ICandidateProfileStoreService.ts";
@@ -20,8 +21,8 @@ export interface IRouterDependencies {
         verify(
             email: string,
             code: string
-        ): Promise<{ ok: true; token: string; email: string } | { ok: false; status: number; message: string }>;
-        signInWithGoogle(idToken: string, sourceIp?: string): Promise<{ ok: true; token: string; email: string; name: string } | { ok: false; status: number; message: string }>;
+        ): Promise<{ ok: true; token: string; email: string; analyticsId: string; analyticsInternal: boolean } | { ok: false; status: number; message: string }>;
+        signInWithGoogle(idToken: string, sourceIp?: string): Promise<{ ok: true; token: string; email: string; name: string; analyticsId: string; analyticsInternal: boolean } | { ok: false; status: number; message: string }>;
         authenticate(token: string): Promise<IResolvedSession | null>;
         signOut(token: string): Promise<void>;
         deleteAccount(accountId: string, email: string): Promise<void>;
@@ -49,6 +50,10 @@ export interface IRouterDependencies {
      * Checks the account's PDF allowance and records the charge before a render starts.
      */
     reserveRender(ownerId: string): Promise<UsageDecision>;
+    /**
+     * Records a product event for the signed-in account. Never throws. Omit to record nothing.
+     */
+    track?(ownerId: string, event: string, properties?: Record<string, unknown>): void;
 }
 
 const tokenPattern = /^Bearer ([A-Za-z0-9_-]{32,128})$/;
@@ -126,6 +131,7 @@ async function exportPdf(request: Request, deps: IRouterDependencies, ownerId: s
     try {
         const pdf = await deps.renderPdf(html);
         if (!pdf.ok) return json({ message: "The PDF renderer could not prepare this file." }, 503);
+        deps.track?.(ownerId, ANALYTICS_EVENTS.pdfRender, { document_type: body.type });
         const headers = new Headers(pdf.headers);
         headers.set("content-type", "application/pdf");
         headers.set("content-disposition", `attachment; filename="${filename}"`);
@@ -156,7 +162,7 @@ export function createRouter(deps: IRouterDependencies): (request: Request) => P
         if (pathname === "/auth/google") {
             if (typeof body?.idToken !== "string" || body.idToken.length === 0 || body.idToken.length > 8000) return json({ message: "Google sign-in didn’t work. Please try again." }, 400);
             const result = await deps.auth.signInWithGoogle(body.idToken, request.headers.get("cf-connecting-ip") ?? undefined);
-            return result.ok ? json({ token: result.token, email: result.email, name: result.name }) : json({ message: result.message }, result.status);
+            return result.ok ? json({ token: result.token, email: result.email, name: result.name, analyticsId: result.analyticsId, analyticsInternal: result.analyticsInternal }) : json({ message: result.message }, result.status);
         }
         if (pathname === "/auth/request-code") {
             if (typeof body?.email !== "string") return json({ message: "Enter a valid email address." }, 400);
@@ -169,7 +175,7 @@ export function createRouter(deps: IRouterDependencies): (request: Request) => P
             return json({ message: "Enter the 6-digit code from your email." }, 400);
         }
         const result = await deps.auth.verify(body.email, body.code);
-        return result.ok ? json({ token: result.token, email: result.email }) : json({ message: result.message }, result.status);
+        return result.ok ? json({ token: result.token, email: result.email, analyticsId: result.analyticsId, analyticsInternal: result.analyticsInternal }) : json({ message: result.message }, result.status);
     }
 
     return async (request) => {
