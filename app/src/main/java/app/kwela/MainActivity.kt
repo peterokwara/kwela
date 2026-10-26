@@ -51,6 +51,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.animation.core.LinearEasing
@@ -77,6 +78,7 @@ import app.kwela.domain.TaskSummary
 import app.kwela.ui.KwelaUiState
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -257,22 +259,22 @@ private val tabs = listOf(
 )
 
 /** A small floating pill with just the icons, the chosen one in a rounded highlight, like Material 3's compact navigation. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun KwelaTabBar(screen: AppScreen, select: (AppScreen) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Box(Modifier.fillMaxWidth().background(colors.surface).navigationBarsPadding().padding(vertical = 10.dp), Alignment.Center) {
-        Surface(shape = CircleShape, color = colors.surfaceContainer) {
-            Row(Modifier.padding(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                tabs.forEach { tab ->
-                    val isSelected = tab.screen == screen
-                    Box(
-                        Modifier.size(width = if (isSelected) 88.dp else 64.dp, height = 56.dp).clip(CircleShape)
-                            .background(if (isSelected) colors.secondaryContainer else Color.Transparent)
-                            .clickable(remember { MutableInteractionSource() }, null, role = Role.Tab) { select(tab.screen) }
-                            .semantics { contentDescription = tab.label; selected = isSelected },
-                        Alignment.Center
-                    ) { Icon(painterResource(if (isSelected) tab.selectedIcon else tab.icon), null, Modifier.size(24.dp), tint = if (isSelected) colors.onSecondaryContainer else colors.onSurfaceVariant) }
-                }
+    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(vertical = 10.dp), Alignment.Center) {
+        HorizontalFloatingToolbar(expanded = true, modifier = Modifier.selectableGroup()) {
+            tabs.forEach { tab ->
+                val isSelected = tab.screen == screen
+                IconButton(
+                    onClick = { select(tab.screen) },
+                    modifier = Modifier.size(width = if (isSelected) 80.dp else 48.dp, height = 48.dp)
+                        .semantics { contentDescription = tab.label; selected = isSelected; role = Role.Tab },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                        contentColor = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) { Icon(painterResource(if (isSelected) tab.selectedIcon else tab.icon), null, Modifier.size(24.dp)) }
             }
         }
     }
