@@ -8,6 +8,8 @@ import androidx.work.WorkManager
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.ExistingWorkPolicy
 import app.kwela.data.ReplyWorker
+import app.kwela.data.local.ApplicationTaskEntity
+import app.kwela.data.local.SavedDocumentEntity
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 import androidx.compose.ui.test.assertIsDisplayed
@@ -60,7 +62,25 @@ class MainActivityFlowTest {
 
         compose.onNodeWithContentDescription("Files").performClick()
         compose.onNodeWithText("Your files will appear here").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Open profile").performClick()
+        compose.onNodeWithContentDescription("Kwela assistant").assertIsDisplayed()
+        compose.onNodeWithText("Kwela").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Kwela assistant").performClick()
+        compose.onNodeWithText("Ready to help").assertIsDisplayed()
+        compose.onNodeWithText("Your tasks and saved files will appear here.").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back to Kwela").performClick()
+        runBlocking {
+            val now = System.currentTimeMillis()
+            app.repository.saveTask(ApplicationTaskEntity("activity-task", "Prepare internship CV", "", "COMPLETED", now, now, now))
+            app.repository.saveDocument(SavedDocumentEntity("activity-file", "Internship CV.pdf", "CV", now + 1))
+        }
+        compose.waitUntil(5_000) { runBlocking { app.repository.documents.first().any { it.id == "activity-file" } } }
+        compose.onNodeWithContentDescription("Kwela assistant").performClick()
+        compose.onNodeWithText("Prepare internship CV").assertIsDisplayed()
+        compose.onNodeWithText("Completed").assertIsDisplayed()
+        compose.onNodeWithText("Internship CV.pdf").assertIsDisplayed()
+        compose.onNodeWithText("Saved to Files").assertIsDisplayed()
+        compose.onNodeWithText("Open Files").performClick()
+        compose.onNodeWithContentDescription("Account and settings").performClick()
         compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Reply notifications").assertIsDisplayed()
         compose.onNodeWithText("Theme").assertIsDisplayed()

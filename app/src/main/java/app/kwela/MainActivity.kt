@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -67,7 +68,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import app.kwela.ui.PendingAttachment
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
-import app.kwela.domain.DisplayName
 import app.kwela.domain.ActivityTimeline
 import app.kwela.domain.ChatTimeHeader
 import app.kwela.domain.DocumentSummary
@@ -99,7 +99,7 @@ import app.kwela.ui.startingMoments
 import app.kwela.ui.LoginScreen
 import app.kwela.ui.ProfileSheet
 import app.kwela.ui.SettingsScreen
-import app.kwela.ui.ProfileAvatar
+import app.kwela.ui.AgentActivityScreen
 import app.kwela.ui.ArtifactCard
 import app.kwela.ui.DocumentActions
 import app.kwela.ui.DocumentPreviewScreen
@@ -181,6 +181,7 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                 state.email == null -> LoginScreen(state.isSigningIn, state.loginError, vm::signInWithGoogle, vm::googleSignInFailed)
                 else -> {
                     var showProfile by rememberSaveable { mutableStateOf(false) }
+                    var showAgent by rememberSaveable { mutableStateOf(false) }
                     var previewId by rememberSaveable { mutableStateOf<String?>(null) }
                     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
                     // Ask once, at the moment it makes sense: the first time Kwela needs a minute and the person might wander off.
@@ -202,9 +203,11 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
                     }
                     if (previewDocument != null) {
                         DocumentPreviewScreen(previewDocument, docActions, changeRequest = { line, note -> previewId = null; vm.sendChangeRequest(previewDocument.title, line, note) }) { previewId = null }
+                    } else if (showAgent) {
+                        AgentActivityScreen(state, close = { showAgent = false }, openChat = { showAgent = false; vm.setScreen(AppScreen.CHAT) }, openFiles = { showAgent = false; vm.setScreen(AppScreen.FILES) })
                     } else if (state.screen == AppScreen.PROFILE) {
                         SettingsScreen(state.notificationsEnabled, vm::setNotificationsEnabled, state.analyticsEnabled, vm::setAnalyticsEnabled, state.themeMode, vm::setThemeMode) { vm.setScreen(AppScreen.CHAT) }
-                    } else MainShell(state.screen, vm::setScreen, state.email.orEmpty(), state.displayName, state.photoUrl, { showProfile = true }) {
+                    } else MainShell(state.screen, vm::setScreen, { showProfile = true }, { showAgent = true }) {
                         when (state.screen) {
                             AppScreen.CHAT, AppScreen.PROFILE -> ChatScreen(state.messages, state.tasks, state.draftText, vm::setDraft, vm::sendDraft, vm::sendSuggestion, vm::cancelTask, vm::attachFile, state.pendingAttachment, state.isReplying, state.replyIsSlow, vm::removeAttachment, vm::retryReply, state.failedReplies, state.pendingMessages, vm::resendMessage, vm::deleteMessage, state.documents, docActions, state.pendingReview, state.downloadGate, vm::answerReview, vm::addMissingDetails, vm::downloadAnyway)
                             AppScreen.FILES -> FilesScreen(state.documents, docActions)
@@ -227,27 +230,28 @@ private fun ApplicationTaskEntity.taskStatus() = runCatching { TaskStatus.valueO
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun MainShell(screen: AppScreen, select: (AppScreen) -> Unit, email: String, knownName: String?, photoUrl: String?, openProfile: () -> Unit, content: @Composable () -> Unit) {
+private fun MainShell(screen: AppScreen, select: (AppScreen) -> Unit, openProfile: () -> Unit, openAgent: () -> Unit, content: @Composable () -> Unit) {
     BackHandler(enabled = screen != AppScreen.CHAT) { select(AppScreen.CHAT) }
     val keyboardOpen = WindowInsets.isImeVisible
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
-        topBar = { KwelaTopBar(email, knownName, photoUrl, openProfile) },
+        topBar = { KwelaTopBar(openProfile, openAgent) },
         bottomBar = { if (!keyboardOpen) KwelaTabBar(screen, select) }
     ) { padding -> Box(Modifier.padding(padding)) { content() } }
 }
 
-/** The top of every main screen: the Kwela name in the middle and a small profile chip at the right. */
+/** The assistant avatar stays centered while account controls sit at the right. */
 @Composable
-private fun KwelaTopBar(email: String, knownName: String?, photoUrl: String?, onProfile: () -> Unit) {
+private fun KwelaTopBar(onProfile: () -> Unit, onAgent: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val name = DisplayName.of(knownName, email)
-    Box(Modifier.fillMaxWidth().background(colors.surface).windowInsetsPadding(WindowInsets.statusBars).height(72.dp)) {
-        Text("kwela", Modifier.align(Alignment.Center), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.onSurface)
-        Surface(
-            onClick = onProfile, shape = CircleShape, color = colors.surfaceContainer,
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp).semantics { contentDescription = "Open profile" }
-        ) { Box(Modifier.padding(4.dp)) { ProfileAvatar(name, 40.dp, photoUrl) } }
+    Box(Modifier.fillMaxWidth().background(colors.surface).windowInsetsPadding(WindowInsets.statusBars).height(96.dp)) {
+        Column(Modifier.align(Alignment.Center).clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = "View Kwela activity", role = Role.Button, onClick = onAgent).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(painterResource(R.drawable.kwela_avatar), contentDescription = "Kwela assistant", modifier = Modifier.size(56.dp))
+            Text("Kwela", style = MaterialTheme.typography.labelMedium, color = colors.onSurface)
+        }
+        IconButton(onClick = onProfile, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)) {
+            Icon(painterResource(R.drawable.ms_settings), contentDescription = "Account and settings", tint = colors.onSurface)
+        }
     }
 }
 

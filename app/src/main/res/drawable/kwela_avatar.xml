@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp" android:height="56dp"
+    android:viewportWidth="400" android:viewportHeight="400">
+    <!-- Android vector version of artwork/woman-chat-avatar.svg. -->
+    <group>
+        <clip-path android:pathData="M200,10 A190,190 0,1 1,199.99,10 Z" />
+        <path android:fillColor="#18AA9D" android:pathData="M0,0h400v400H0z" />
+        <path android:fillColor="#E90037" android:strokeColor="#F7F5E9" android:strokeWidth="7" android:strokeLineJoin="round"
+            android:pathData="M-8,398 C4,348 48,323 94,308 C125,298 154,289 200,288 C248,288 278,298 308,310 C356,329 390,352 410,400Z" />
+        <path android:fillColor="#85B4ED" android:strokeColor="#F7F5E9" android:strokeWidth="8" android:strokeLineJoin="round"
+            android:pathData="M66,315 C83,301 94,289 104,276 C95,252 94,224 96,195 C100,133 126,82 172,64 C207,50 240,58 272,76 C306,96 323,127 326,165 C331,207 318,245 302,277 C291,300 278,320 259,337 C243,352 227,365 210,368 C190,369 174,359 158,350 C128,334 103,317 81,306Z" />
+        <path android:fillColor="#49332D" android:strokeColor="#F7F5E9" android:strokeWidth="6"
+            android:pathData="M143,182 C148,150 169,120 195,113 C219,106 242,119 258,140 C275,161 280,185 277,211 C274,240 260,268 243,282 C225,297 201,299 181,287 C158,274 145,247 140,218 C138,205 139,194 143,182Z" />
+        <path android:fillColor="#17191A" android:strokeColor="#F7F5E9" android:strokeWidth="6" android:strokeLineJoin="round"
+            android:pathData="M119,165 C127,160 139,164 152,168 C170,174 183,177 197,175 C210,173 217,177 228,177 C244,178 260,170 278,170 C287,170 297,172 301,177 C305,182 300,187 296,192 L277,213 C269,222 262,227 254,226 C244,225 234,216 224,212 C216,208 209,207 202,211 C191,216 183,225 172,226 C158,227 148,221 141,213 C131,202 120,189 114,180 C110,174 113,168 119,165Z" />
+    </group>
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#F7F5E9" android:strokeWidth="10"
+        android:pathData="M200,10 A190,190 0,1 1,199.99,10 Z" />
+</vector>
