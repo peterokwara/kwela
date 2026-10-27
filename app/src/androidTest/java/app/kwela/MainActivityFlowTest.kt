@@ -94,7 +94,7 @@ class MainActivityFlowTest {
         androidx.test.espresso.Espresso.pressBack()
         compose.onNodeWithContentDescription("Close settings").performClick()
         compose.onNodeWithContentDescription("Chat").performClick()
-        compose.onNodeWithText("What’s going on right now?").assertIsDisplayed()
+        compose.onNodeWithText("Your CV is ready.").assertIsDisplayed()
 
         // A delayed worker keeps Kwela busy without calling the real API.
         val manager = WorkManager.getInstance(compose.activity)

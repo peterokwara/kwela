@@ -41,7 +41,7 @@ fun AgentActivityScreen(state: KwelaUiState, close: () -> Unit, openChat: () -> 
         .map { ActivityEntry("message-${it.id}", "Reply in Chat", "Saved in conversation", it.createdAt) }
     val entries = (files + replies).sortedByDescending { it.at }
     val status = when {
-        state.pendingMessages.values.any { it } -> "Waiting for a connection"
+        state.pendingMessages.values.any { it } -> "Waiting to check again"
         state.isReplying || state.pendingMessages.isNotEmpty() -> "Request in progress"
         state.pendingReview != null -> "A question for you"
         state.failedReplies.isNotEmpty() -> "Something needs your attention"
@@ -69,7 +69,7 @@ fun AgentActivityScreen(state: KwelaUiState, close: () -> Unit, openChat: () -> 
             }
             if (state.pendingMessages.isNotEmpty()) {
                 items(state.pendingMessages.toList(), key = { "pending-${it.first}" }) { (_, waiting) ->
-                    ActivityRow("Your request", if (waiting) "Waiting for a connection" else "In progress", null)
+                    ActivityRow("Your request", if (waiting) "Waiting to check again" else "In progress", null)
                 }
             }
             if (state.failedReplies.isNotEmpty()) {
