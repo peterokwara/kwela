@@ -27,25 +27,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.kwela.R
 import app.kwela.domain.ActivityTimeline
+import app.kwela.domain.ActivityEntry
 import app.kwela.domain.ChatTimeHeader
 import app.kwela.domain.DocumentSummary
-import app.kwela.domain.TaskStatus
-import app.kwela.domain.TaskSummary
 
 /** Shows the activity available on this device, with a way back to the relevant screen. */
 @Composable
 fun AgentActivityScreen(state: KwelaUiState, close: () -> Unit, openChat: () -> Unit, openFiles: () -> Unit) {
     BackHandler(onBack = close)
     val colors = MaterialTheme.colorScheme
-    val tasks = state.tasks.map {
-        TaskSummary(it.id, it.title, runCatching { TaskStatus.valueOf(it.status) }.getOrDefault(TaskStatus.FAILED), it.updatedAt)
-    }
-    val entries = ActivityTimeline.build(tasks, state.documents.map { DocumentSummary(it.id, it.title, it.createdAt) })
+    val files = ActivityTimeline.build(emptyList(), state.documents.map { DocumentSummary("file-${it.id}", it.title, it.createdAt) })
+    val replies = state.messages.filter { it.role == "ASSISTANT" && it.id.startsWith("reply-") }
+        .map { ActivityEntry("message-${it.id}", "Reply in Chat", "Saved in conversation", it.createdAt) }
+    val entries = (files + replies).sortedByDescending { it.at }
     val status = when {
         state.pendingMessages.values.any { it } -> "Waiting for a connection"
-        state.isReplying || state.pendingMessages.isNotEmpty() || tasks.any { it.status == TaskStatus.RUNNING || it.status == TaskStatus.QUEUED } -> "Working on your request"
-        state.pendingReview != null || tasks.any { it.status == TaskStatus.WAITING_FOR_USER } -> "A question for you"
-        state.failedReplies.isNotEmpty() || tasks.any { it.status == TaskStatus.FAILED } -> "Something needs your attention"
+        state.isReplying || state.pendingMessages.isNotEmpty() -> "Request in progress"
+        state.pendingReview != null -> "A question for you"
+        state.failedReplies.isNotEmpty() -> "Something needs your attention"
         else -> "Ready to help"
     }
     val now = System.currentTimeMillis()
@@ -62,7 +61,12 @@ fun AgentActivityScreen(state: KwelaUiState, close: () -> Unit, openChat: () -> 
                     Button(onClick = openChat) { Text("Go to chat") }
                 }
             }
-            item { Text("Recent activity", style = MaterialTheme.typography.titleMedium) }
+            item {
+                Column {
+                    Text("Recent activity", style = MaterialTheme.typography.titleMedium)
+                    Text("Replies and saved files on this device", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                }
+            }
             if (state.pendingMessages.isNotEmpty()) {
                 items(state.pendingMessages.toList(), key = { "pending-${it.first}" }) { (_, waiting) ->
                     ActivityRow("Your request", if (waiting) "Waiting for a connection" else "In progress", null)
@@ -74,10 +78,13 @@ fun AgentActivityScreen(state: KwelaUiState, close: () -> Unit, openChat: () -> 
                 }
             }
             if (entries.isEmpty() && state.pendingMessages.isEmpty() && state.failedReplies.isEmpty()) {
-                item { Text("Your tasks and saved files will appear here.", color = colors.onSurfaceVariant) }
+                item { Text("Your replies and saved files will appear here.", color = colors.onSurfaceVariant) }
             }
             items(entries, key = { "activity-${it.id}" }) { entry ->
-                ActivityRow(entry.title, entry.detail, ChatTimeHeader.label(entry.at, now))
+                ActivityRow(entry.title, entry.detail, if (entry.id.startsWith("file-")) ChatTimeHeader.label(entry.at, now) else null)
+            }
+            if (replies.isNotEmpty()) {
+                item { TextButton(onClick = openChat) { Text("Open Chat") } }
             }
             if (state.documents.isNotEmpty()) {
                 item { TextButton(onClick = openFiles) { Text("Open Files") } }

@@ -68,13 +68,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import app.kwela.ui.PendingAttachment
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
-import app.kwela.domain.ActivityTimeline
 import app.kwela.domain.ChatTimeHeader
-import app.kwela.domain.DocumentSummary
 import app.kwela.domain.ReviewDecision
 import app.kwela.domain.TaskStatus
 import app.kwela.domain.ThemeMode
-import app.kwela.domain.TaskSummary
 import app.kwela.ui.KwelaUiState
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -225,8 +222,6 @@ private object NavigationSymbols {
     val MessageCircle = R.drawable.ms_chat_bubble
     val X = R.drawable.ms_close
 }
-
-private fun ApplicationTaskEntity.taskStatus() = runCatching { TaskStatus.valueOf(status) }.getOrDefault(TaskStatus.FAILED)
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)

@@ -8,7 +8,7 @@ import androidx.work.WorkManager
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.ExistingWorkPolicy
 import app.kwela.data.ReplyWorker
-import app.kwela.data.local.ApplicationTaskEntity
+import app.kwela.data.local.ChatMessageEntity
 import app.kwela.data.local.SavedDocumentEntity
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
@@ -66,17 +66,21 @@ class MainActivityFlowTest {
         compose.onNodeWithText("Kwela").assertIsDisplayed()
         compose.onNodeWithContentDescription("Kwela assistant").performClick()
         compose.onNodeWithText("Ready to help").assertIsDisplayed()
-        compose.onNodeWithText("Your tasks and saved files will appear here.").assertIsDisplayed()
+        compose.onNodeWithText("Your replies and saved files will appear here.").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back to Kwela").performClick()
         runBlocking {
             val now = System.currentTimeMillis()
-            app.repository.saveTask(ApplicationTaskEntity("activity-task", "Prepare internship CV", "", "COMPLETED", now, now, now))
+            app.repository.saveMessage(ChatMessageEntity("reply-activity-request", "ASSISTANT", "Your CV is ready.", now))
             app.repository.saveDocument(SavedDocumentEntity("activity-file", "Internship CV.pdf", "CV", now + 1))
         }
         compose.waitUntil(5_000) { runBlocking { app.repository.documents.first().any { it.id == "activity-file" } } }
         compose.onNodeWithContentDescription("Kwela assistant").performClick()
-        compose.onNodeWithText("Prepare internship CV").assertIsDisplayed()
-        compose.onNodeWithText("Completed").assertIsDisplayed()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Reply in Chat").fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithText("Internship CV.pdf").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Reply in Chat").assertIsDisplayed()
+        compose.onNodeWithText("Saved in conversation").assertIsDisplayed()
         compose.onNodeWithText("Internship CV.pdf").assertIsDisplayed()
         compose.onNodeWithText("Saved to Files").assertIsDisplayed()
         compose.onNodeWithText("Open Files").performClick()
