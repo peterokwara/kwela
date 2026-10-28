@@ -51,7 +51,7 @@
         </tr>
         <tr id="tester-sign-up">
             <td><strong>Tester sign-up</strong> (the email address and phone number you give on the Try Kwela early page, and the time you agreed to be contacted)</td>
-            <td>To invite you to test Kwela and to contact you by email, phone call or WhatsApp, including to ask how you look for jobs and apply for them. You choose to give it by ticking a box, and you can ask us to delete it at any time.</td>
+            <td>To invite you to test Kwela and to contact you by email, phone call or WhatsApp, including to ask for your feedback and how you look for jobs. You choose to give it by submitting the form, which says so next to the button, and you can ask us to delete it at any time.</td>
             <td>Our Cloudflare database. Only we can read it. It is not shared with anyone, not used for advertising, and not linked to your Kwela account. We keep it until the test ends or you ask us to delete it, whichever is first. Send a message on the <a href="/support">Support page</a>, from the address you signed up with. A keyed hash of your IP address is kept in the rate-limit table below to stop repeated sign-ups.</td>
         </tr>
         <tr id="support-messages">

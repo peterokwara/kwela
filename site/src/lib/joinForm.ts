@@ -12,7 +12,6 @@ export function readJoinForm(form: FormData): FormResult<{ email: string; phone:
     if (email.length > 254 || !emailPattern.test(email)) return { ok: false, message: "Enter a valid email address." };
     const phone = String(form.get("phone") ?? "").trim();
     if (phone.length === 0 || phone.length > 32) return { ok: false, message: "Enter a phone number we can reach you on, like 0712 345 678. Start with + for other countries." };
-    if (form.get("consent") !== "yes") return { ok: false, message: "Tick the box so we know it is okay to contact you." };
     // Real people never see the hidden field. It is cut short so a bot cannot send a huge value.
     return { ok: true, value: { email, phone, website: String(form.get("website") ?? "").slice(0, 200) } };
 }

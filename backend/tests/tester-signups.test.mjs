@@ -76,13 +76,13 @@ test("a sign-up is saved with the time consent was given", async () => {
     assert.deepEqual(s.saved, [{ email: "amina@example.test", phone: "+254712345678", consentAt: 1_000_000, createdAt: 1_000_000 }]);
 });
 
-test("nothing is saved without consent", async () => {
+test("nothing is saved unless the site says the visitor agreed", async () => {
     const { s, svc } = service();
     for (const consent of [false, undefined, "yes", 1, "true"]) {
         const result = await svc.submit({ ...good, consent }, ctx);
         assert.equal(result.ok, false);
         assert.equal(result.status, 400);
-        assert.equal(result.message, "Tick the box so we know it is okay to contact you.");
+        assert.equal(result.message, "We need your agreement to contact you.");
     }
     assert.equal(s.saved.length, 0);
 });

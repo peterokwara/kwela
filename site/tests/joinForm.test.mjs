@@ -8,7 +8,7 @@ function form(values) {
     return data;
 }
 
-const good = { email: "  Amina@Example.test ", phone: " 0712 345 678 ", consent: "yes", website: "" };
+const good = { email: "  Amina@Example.test ", phone: " 0712 345 678 ", website: "" };
 
 test("a complete form is tidied up and passed on", () => {
     assert.deepEqual(readJoinForm(form(good)), { ok: true, value: { email: "amina@example.test", phone: "0712 345 678", website: "" } });
@@ -34,15 +34,10 @@ test("an empty or huge phone number is refused", () => {
     }
 });
 
-test("the consent box must be ticked", () => {
-    for (const consent of [undefined, "", "no", "on", "true"]) {
-        const values = { ...good };
-        if (consent === undefined) delete values.consent;
-        else values.consent = consent;
-        const result = readJoinForm(form(values));
-        assert.equal(result.ok, false);
-        assert.equal(result.message, "Tick the box so we know it is okay to contact you.");
-    }
+test("there is no tick box: the notice under the button is the agreement, so the form needs no consent field", () => {
+    const values = { ...good };
+    delete values.consent;
+    assert.equal(readJoinForm(form(values)).ok, true);
 });
 
 test("the hidden field is passed on so the server can spot bots, and long values are cut off", () => {

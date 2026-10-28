@@ -122,7 +122,7 @@ export function createTesterSignupService(options: ITesterSignupServiceOptions) 
             if (typeof input.website === "string" && input.website.length > 0) return { ok: true };
             const read = readSignup(input);
             if (!read.ok) return { ok: false, status: 400, message: read.message };
-            if (input.consent !== true) return { ok: false, status: 400, message: "Tick the box so we know it is okay to contact you." };
+            if (input.consent !== true) return { ok: false, status: 400, message: "We need your agreement to contact you." };
 
             const time = now();
             const ip = context.sourceIp?.trim();

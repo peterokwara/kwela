@@ -60,7 +60,7 @@ pnpm run deploy
 
 ## Tester sign-ups
 
-The website's `/join` page collects an email address and phone number from people who want to test Kwela, with a ticked consent box. The site Worker sends them to `POST /signup` through its service binding, with the visitor's address in `x-client-ip` and a shared secret in `x-signup-token`.
+The website's `/join` page collects an email address and phone number from people who want to test Kwela, with a notice next to the button that submitting means agreeing to be contacted. The site Worker sends them to `POST /signup` through its service binding, with the visitor's address in `x-client-ip` and a shared secret in `x-signup-token`.
 
 How it is protected:
 

@@ -43,18 +43,10 @@
                 <Field label="Phone number" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="0712 345 678" value={form?.phone ?? ""} maxlength="32" required />
 
                 <Honeypot />
-
-                <label class="flex items-start gap-3 text-sm text-gray-700">
-                    <input type="checkbox" name="consent" value="yes" required class="mt-1 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
-                    <span>
-                        Yes, Kwela may contact me by email, phone call or WhatsApp about testing the app, and may ask me about how I look for jobs and apply for them. I can ask to be
-                        removed at any time.
-                    </span>
-                </label>
             </div>
             {#if form?.message}<p class="mt-6 text-sm font-semibold text-red-700" role="alert">{form.message}</p>{/if}
             <Button type="submit" color="teal" class="mt-8 w-full" disabled={busy}>{busy ? "Sending…" : "Count me in"}</Button>
-            <p class="mt-6 text-center text-sm text-gray-500">It takes under a minute. We use your details only to run the test and never sell them. See our <a href="/privacy#tester-sign-up" class="text-teal-700 underline underline-offset-4">Privacy Policy</a>.</p>
+            <p class="mt-6 text-center text-sm text-gray-500">By tapping Count me in, you agree we may message you about testing Kwela and ask for your feedback. We never sell your details. <a href="/privacy#tester-sign-up" class="text-teal-700 underline underline-offset-4">Privacy Policy</a></p>
         </form>
     {/if}
 </AuthLayout>
