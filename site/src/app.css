@@ -1,42 +1,107 @@
-:root {
-    color-scheme: light dark;
-    --bg: #fafaff;
-    --fg: #1a1b21;
-    --muted: #5b5e6b;
-    --card: #eeeef6;
-    --accent: #2a4073;
-    --accent-fg: #ffffff;
-    --danger: #ba1a1a;
-    --line: #d9dae6;
-}
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg: #121318;
-        --fg: #e4e2e9;
-        --muted: #a9acba;
-        --card: #1f1f26;
-        --accent: #b2c5ff;
-        --accent-fg: #0b1b3d;
-        --danger: #ffb4ab;
-        --line: #33343d;
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+@plugin "@tailwindcss/forms";
+
+/* The layout, type scale and motion come from the Pocket template (Tailwind Plus). The colours are Kwela's own. */
+@theme {
+    --text-*: initial;
+    --text-xs: 0.75rem;
+    --text-xs--line-height: 1rem;
+    --text-sm: 0.875rem;
+    --text-sm--line-height: 1.5rem;
+    --text-base: 1rem;
+    --text-base--line-height: 1.5rem;
+    --text-lg: 1.125rem;
+    --text-lg--line-height: 2rem;
+    --text-xl: 1.25rem;
+    --text-xl--line-height: 1.75rem;
+    --text-2xl: 1.5rem;
+    --text-2xl--line-height: 2rem;
+    --text-3xl: 2rem;
+    --text-3xl--line-height: 3rem;
+    --text-4xl: 2.5rem;
+    --text-4xl--line-height: 3rem;
+    --text-5xl: 3rem;
+    --text-5xl--line-height: 1;
+    --text-6xl: 3.75rem;
+    --text-6xl--line-height: 1;
+
+    --animate-fade-in: fade-in 0.5s linear forwards;
+    --animate-rise: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+    --animate-spin-slow: spin 4s linear infinite;
+    --animate-spin-slower: spin 6s linear infinite;
+    --animate-spin-reverse-slower: spin-reverse 6s linear infinite;
+
+    --radius-4xl: 2rem;
+    --radius-5xl: 2.5rem;
+
+    --color-gray-50: oklch(0.985 0 0);
+    --color-gray-100: oklch(0.97 0 0);
+    --color-gray-200: oklch(0.922 0 0);
+    --color-gray-300: oklch(0.87 0 0);
+    --color-gray-400: oklch(0.708 0 0);
+    --color-gray-500: oklch(0.556 0 0);
+    --color-gray-600: oklch(0.439 0 0);
+    --color-gray-700: oklch(0.371 0 0);
+    --color-gray-800: oklch(0.269 0 0);
+    --color-gray-900: oklch(0.205 0 0);
+    --color-gray-950: oklch(0.145 0 0);
+
+    /* Kwela teal, built around the avatar's #18aa9d. */
+    --color-teal-50: #effcfa;
+    --color-teal-100: #d5f6f1;
+    --color-teal-200: #aeece4;
+    --color-teal-300: #7bdcd1;
+    --color-teal-400: #47c4b8;
+    --color-teal-500: #18aa9d;
+    --color-teal-600: #118a81;
+    --color-teal-700: #126f69;
+    --color-teal-800: #135856;
+    --color-teal-900: #134947;
+    --color-teal-950: #052b2b;
+
+    --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+    @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    @keyframes rise {
+        from { opacity: 0; transform: translateY(14px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin-reverse {
+        to { transform: rotate(-360deg); }
     }
 }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-a { color: var(--accent); }
-h1 { font-size: 2rem; line-height: 1.25; margin: 0 0 0.25rem; }
-h2 { font-size: 1.25rem; margin: 2.2rem 0 0.4rem; }
-p, li { max-width: 68ch; }
-.muted { color: var(--muted); }
-.card { background: var(--card); border-radius: 20px; padding: 1.25rem 1.5rem; margin: 1.25rem 0; }
-label { display: block; font-weight: 600; margin: 1rem 0 0.35rem; }
-input[type="email"], input[type="text"], input[type="tel"] { width: 100%; max-width: 26rem; padding: 0.8rem 1rem; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; }
-button { padding: 0.8rem 1.6rem; border-radius: 999px; border: 0; background: var(--accent); color: var(--accent-fg); font: inherit; font-weight: 600; cursor: pointer; margin-top: 1rem; }
-button.danger { background: var(--danger); color: var(--bg); }
-button:disabled { opacity: 0.6; cursor: default; }
-.error { color: var(--danger); font-weight: 600; }
-.check { display: flex; gap: 0.6rem; align-items: flex-start; font-weight: 400; margin-top: 1.25rem; }
-.check input { margin-top: 0.4rem; }
-table { border-collapse: collapse; width: 100%; max-width: 68ch; margin: 1rem 0; }
-th, td { text-align: left; vertical-align: top; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--line); font-size: 0.95rem; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+html { background: var(--color-gray-50); -webkit-font-smoothing: antialiased; }
+
+/* Plain-text pages (privacy, terms, support, delete account) keep their simple markup and get the template's look here. */
+.legal { color: var(--color-gray-700); }
+.legal h1 { font-size: 2.5rem; line-height: 3rem; font-weight: 500; letter-spacing: -0.025em; color: var(--color-gray-900); margin: 0 0 0.5rem; }
+.legal h2 { font-size: 1.25rem; line-height: 1.75rem; font-weight: 600; color: var(--color-gray-900); margin: 2.5rem 0 0.5rem; }
+.legal p, .legal li { max-width: 68ch; line-height: 1.75; }
+.legal p { margin: 0.9rem 0; }
+.legal ul { list-style: disc; padding-left: 1.4rem; margin: 0.9rem 0; }
+.legal a { color: var(--color-teal-700); text-decoration: underline; text-underline-offset: 3px; }
+.legal .muted { color: var(--color-gray-500); }
+.legal .card { background: white; border-radius: 1.5rem; padding: 1.5rem 1.75rem; margin: 1.5rem 0; box-shadow: 0 25px 50px -12px rgb(23 23 23 / 0.1); }
+.legal label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--color-gray-900); margin: 1rem 0 0.4rem; }
+.legal input[type="email"], .legal input[type="text"], .legal input[type="tel"] { display: block; width: 100%; max-width: 26rem; border-radius: 0.5rem; border: 1px solid var(--color-gray-200); background: white; padding: 0.5rem 0.75rem; color: var(--color-gray-900); }
+.legal input:focus { border-color: var(--color-teal-500); --tw-ring-color: var(--color-teal-500); }
+.legal button { margin-top: 1.25rem; border-radius: 0.5rem; background: var(--color-gray-800); color: white; padding: 0.55rem 1.1rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+.legal button:hover { background: var(--color-gray-900); }
+.legal button.danger { background: #b42318; }
+.legal button:disabled { opacity: 0.6; cursor: default; }
+.legal .error { color: #b42318; font-weight: 600; }
+.legal .check { display: flex; gap: 0.6rem; align-items: flex-start; font-weight: 400; margin-top: 1.25rem; }
+.legal .check input { margin-top: 0.4rem; }
+.legal table { border-collapse: collapse; width: 100%; max-width: 68ch; margin: 1rem 0; }
+.legal th, .legal td { text-align: left; vertical-align: top; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--color-gray-200); font-size: 0.95rem; }
 .trap { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
