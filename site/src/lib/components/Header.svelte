@@ -4,9 +4,9 @@
     import Logo from "./Logo.svelte";
 
     const links = [
-        { href: "/#how", label: "How it works" },
-        { href: "/privacy", label: "Privacy" },
-        { href: "/support", label: "Support" }
+        { href: "/#features", label: "Features" },
+        { href: "/#benefits", label: "Benefits" },
+        { href: "/#faqs", label: "FAQs" }
     ];
     let open = $state(false);
 </script>
@@ -23,7 +23,7 @@
                 </div>
             </div>
             <div class="flex items-center gap-6">
-                <div class="max-lg:hidden"><Button href="/join" color="teal">Try Kwela early</Button></div>
+                <div class="flex items-center gap-6 max-lg:hidden"><Button href="/support" variant="outline">Support</Button><Button href="/join">Try Kwela early</Button></div>
                 <button
                     class="relative z-10 -m-2 inline-flex items-center rounded-lg stroke-gray-900 p-2 hover:bg-gray-200/50 lg:hidden"
                     aria-label="Toggle site navigation"
@@ -42,7 +42,7 @@
                             <a href={link.href} onclick={() => (open = false)} class="block text-base/7 tracking-tight text-gray-700">{link.label}</a>
                         {/each}
                     </div>
-                    <div class="mt-8 flex flex-col gap-4"><Button href="/join" color="teal">Try Kwela early</Button></div>
+                    <div class="mt-8 flex flex-col gap-4"><Button href="/support" variant="outline">Support</Button><Button href="/join">Try Kwela early</Button></div>
                 </div>
             {/if}
         </Container>

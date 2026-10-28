@@ -4,6 +4,8 @@
     import Logo from "./Logo.svelte";
 
     const links = [
+        { href: "/#features", label: "Features" },
+        { href: "/#faqs", label: "FAQs" },
         { href: "/privacy", label: "Privacy" },
         { href: "/terms", label: "Terms" },
         { href: "/delete-account", label: "Delete account" },
