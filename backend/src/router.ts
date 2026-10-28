@@ -46,6 +46,13 @@ export interface IRouterDependencies {
         submit(body: unknown, context: { sourceIp?: string; token: string }): Promise<{ ok: true } | { ok: false; status: number; message: string }>;
     };
     /**
+     * Records messages sent from the website's Support page. Omit to answer 503.
+     */
+    contact?: {
+        check(token: string): Promise<{ ok: true } | { ok: false; status: number; message: string }>;
+        submit(body: unknown, context: { sourceIp?: string; token: string }): Promise<{ ok: true } | { ok: false; status: number; message: string }>;
+    };
+    /**
      * Saved CV profiles, one per owner.
      */
     profiles: ICandidateProfileStoreService;
@@ -68,6 +75,7 @@ export interface IRouterDependencies {
 }
 
 const MAX_SIGNUP_BODY_CHARS = 2000;
+const MAX_CONTACT_BODY_CHARS = 6000;
 
 /** Reads at most `limit` characters of a request body, stopping as soon as it is too long.
  * @param request Incoming request.
@@ -213,14 +221,16 @@ export function createRouter(deps: IRouterDependencies): (request: Request) => P
         return result.ok ? json({ token: result.token, email: result.email, analyticsId: result.analyticsId, analyticsInternal: result.analyticsInternal }) : json({ message: result.message }, result.status);
     }
 
-    /** Handles a tester sign-up from the Kwela website. It has no sign-in, so the service checks the site token and rate limits itself. */
-    async function signupRoute(request: Request): Promise<Response> {
+    /** Handles a form sent by the Kwela website (a tester sign-up or a Support message).
+     * It has no sign-in, so the service checks the site token and rate limits itself.
+     */
+    async function siteFormRoute(request: Request, service: IRouterDependencies["signups"], closedMessage: string, maxChars: number): Promise<Response> {
         if (request.method !== "POST") return methodNotAllowed(["POST"]);
-        if (!deps.signups) return json({ message: "Sign-ups are not open yet." }, 503);
+        if (!service) return json({ message: closedMessage }, 503);
         const token = request.headers.get("x-signup-token") ?? "";
-        const allowed = await deps.signups.check(token);
+        const allowed = await service.check(token);
         if (!allowed.ok) return json({ message: allowed.message }, allowed.status);
-        const text = await readLimitedText(request, MAX_SIGNUP_BODY_CHARS);
+        const text = await readLimitedText(request, maxChars);
         if (text === null) return json({ message: "That request is too large." }, 413);
         let body: unknown = null;
         try {
@@ -228,8 +238,8 @@ export function createRouter(deps: IRouterDependencies): (request: Request) => P
         } catch {
             body = null;
         }
-        if (!body || typeof body !== "object" || Array.isArray(body)) return json({ message: "Enter your email address and phone number." }, 400);
-        const result = await deps.signups.submit(body, {
+        if (!body || typeof body !== "object" || Array.isArray(body)) return json({ message: "Fill in the form and try again." }, 400);
+        const result = await service.submit(body, {
             // The site is the only caller with the token and it reads the visitor's address from Cloudflare, so this header can be trusted here.
             sourceIp: request.headers.get("x-client-ip") ?? undefined,
             token
@@ -240,7 +250,8 @@ export function createRouter(deps: IRouterDependencies): (request: Request) => P
     return async (request) => {
         const { pathname } = new URL(request.url);
         if (pathname === "/health") return json({ ok: true });
-        if (pathname === "/signup") return signupRoute(request);
+        if (pathname === "/signup") return siteFormRoute(request, deps.signups, "Sign-ups are not open yet.", MAX_SIGNUP_BODY_CHARS);
+        if (pathname === "/contact") return siteFormRoute(request, deps.contact, "The contact form is not open yet.", MAX_CONTACT_BODY_CHARS);
         if (pathname.startsWith("/auth/")) return authRoute(request, pathname);
         if (!pathname.startsWith("/api/")) return json({ message: "Not found." }, 404);
 

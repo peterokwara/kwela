@@ -4,16 +4,18 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import app.kwela.BuildConfig
 
-/** Small helpers for handing off to other apps: the browser, email, the share sheet and the Play Store. */
+/** Small helpers for handing off to other apps: the browser, the share sheet and the Play Store. */
 fun openUrl(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
-fun sendEmail(context: Context, to: String, subject: String) {
-    val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$to")).putExtra(Intent.EXTRA_SUBJECT, subject)
-    runCatching { context.startActivity(intent) }.onFailure { Toast.makeText(context, "No email app found.", Toast.LENGTH_SHORT).show() }
-}
+/** The website's Support page, found next to the privacy page. Empty when no privacy page is set, which hides the Help rows. */
+fun supportPageUrl(): String =
+    BuildConfig.PRIVACY_URL.takeIf { it.isNotBlank() }
+        ?.let { Uri.parse(it).buildUpon().encodedPath("/support").clearQuery().fragment(null).build().toString() }
+        .orEmpty()
 
 fun shareText(context: Context, text: String) {
     val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)

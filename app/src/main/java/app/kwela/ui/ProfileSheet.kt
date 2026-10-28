@@ -77,8 +77,8 @@ fun ProfileSheet(email: String, knownName: String?, photoUrl: String?, openSetti
                 ProfileRow(R.drawable.ms_settings, "Settings") { dismiss(); openSettings() }
                 ProfileRow(R.drawable.ms_share, "Share Kwela") { shareText(context, "Kwela helps you apply for jobs fast, right from your phone: https://play.google.com/store/apps/details?id=${context.packageName}") }
                 ProfileRow(R.drawable.ms_star, "Leave a review") { openPlayListing(context) }
-                BuildConfig.SUPPORT_EMAIL.takeIf { it.isNotBlank() }?.let { to ->
-                    ProfileRow(R.drawable.ms_help, "Help and feedback") { sendEmail(context, to, "Kwela feedback (${BuildConfig.VERSION_NAME})") }
+                supportPageUrl().takeIf { it.isNotBlank() }?.let { url ->
+                    ProfileRow(R.drawable.ms_help, "Help and feedback") { openUrl(context, url) }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

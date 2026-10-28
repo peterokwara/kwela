@@ -33,14 +33,23 @@ function normalizePhone(raw: string): string | null {
     return /^[1-9]\d{7,14}$/.test(international) ? `+${international}` : null;
 }
 
+/** Tidies an email address.
+ * @param value Value from the request.
+ * @returns The lowercase address, or null when it is not an email address.
+ */
+export function readEmail(value: unknown): string | null {
+    const email = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return email.length > 254 || !emailPattern.test(email) ? null : email;
+}
+
 /** Reads and tidies the email and phone number of a sign-up.
  * @param body Parsed request body.
  * @returns The cleaned values, or a message safe to show a person.
  */
 export function readSignup(body: unknown): { ok: true; value: { email: string; phone: string } } | { ok: false; message: string } {
     const input = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-    const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
-    if (email.length > 254 || !emailPattern.test(email)) return { ok: false, message: "Enter a valid email address." };
+    const email = readEmail(input.email);
+    if (!email) return { ok: false, message: "Enter a valid email address." };
     const phone = typeof input.phone === "string" ? normalizePhone(input.phone) : null;
     if (!phone) return { ok: false, message: phoneMessage };
     return { ok: true, value: { email, phone } };
@@ -51,14 +60,18 @@ function toHex(bytes: ArrayBuffer): string {
     return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Computes an opaque key so IP addresses are not stored in the rate-limit table. `all` is the shared backstop key. */
-async function hashLimiterKey(secret: string, value: string): Promise<string> {
+/** Computes an opaque key so IP addresses are not stored in the rate-limit table.
+ * @param secret Server secret.
+ * @param scope Which form the limit belongs to, so forms never share a bucket.
+ * @param value The address, or `all` for the shared backstop.
+ */
+export async function hashLimiterKey(secret: string, scope: string, value: string): Promise<string> {
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    return toHex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`signup:ip:${value}`)));
+    return toHex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${scope}:ip:${value}`)));
 }
 
 /** Compares two secrets without leaking where they differ. */
-async function sameSecret(a: string, b: string): Promise<boolean> {
+export async function sameSecret(a: string, b: string): Promise<boolean> {
     const [hashA, hashB] = await Promise.all([a, b].map(async (value) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)))));
     let difference = 0;
     for (let index = 0; index < hashA.length; index += 1) difference |= hashA[index] ^ hashB[index];
@@ -114,13 +127,13 @@ export function createTesterSignupService(options: ITesterSignupServiceOptions) 
             const time = now();
             const ip = context.sourceIp?.trim();
             const allowed = await store.hitRateLimit(
-                await hashLimiterKey(secret, ip || "unknown"),
+                await hashLimiterKey(secret, "signup", ip || "unknown"),
                 time,
                 WINDOW_MS,
                 ip ? MAX_SIGNUPS_PER_IP_WINDOW : MAX_SIGNUPS_FROM_UNKNOWN_IP_WINDOW
             );
             // A backstop in case the per-address limit is dodged by sending many different addresses.
-            const underTotal = await store.hitRateLimit(await hashLimiterKey(secret, "all"), time, WINDOW_MS, MAX_SIGNUPS_IN_TOTAL_WINDOW);
+            const underTotal = await store.hitRateLimit(await hashLimiterKey(secret, "signup", "all"), time, WINDOW_MS, MAX_SIGNUPS_IN_TOTAL_WINDOW);
             if (!allowed || !underTotal) return { ok: false, status: 429, message: "Too many tries. Please wait a while and try again." };
 
             try {

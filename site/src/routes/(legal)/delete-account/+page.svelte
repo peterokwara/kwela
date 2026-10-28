@@ -68,4 +68,4 @@
     </form>
 {/if}
 
-<p class="muted">Cannot use this page? Email <a href="mailto:{site.supportEmail}">{site.supportEmail}</a> from your account address and we will delete it for you.</p>
+<p class="muted">Cannot use this page? Send a message on the <a href="/support">Support page</a>, using the address on your account, and we will delete it for you.</p>

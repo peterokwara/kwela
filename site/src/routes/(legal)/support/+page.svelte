@@ -1,5 +1,20 @@
 <script lang="ts">
-    import { site } from "#lib/config.ts";
+    import { enhance } from "$app/forms";
+
+    let { form } = $props();
+    let busy = $state(false);
+
+    /** Keeps the button disabled while a request is in flight. */
+    function submitting() {
+        busy = true;
+        return async ({ update }: { update: () => Promise<void> }) => {
+            try {
+                await update();
+            } finally {
+                busy = false;
+            }
+        };
+    }
 </script>
 
 <svelte:head>
@@ -8,7 +23,32 @@
 </svelte:head>
 
 <h1>Support</h1>
-<p>Write to <a href="mailto:{site.supportEmail}">{site.supportEmail}</a> and we will reply. Please say which phone you use and what happened.</p>
+<p>Send us a message and we will reply by email. Please say which phone you use and what happened.</p>
+
+{#if form?.sent}
+    <div class="card">
+        <h2 style="margin-top:0">Message sent</h2>
+        <p>Thank you. We will reply to the address you gave. Replies can take a day or two.</p>
+    </div>
+{:else}
+    <form method="POST" action="?/send" use:enhance={submitting} class="card">
+        <label for="email">Your email address</label>
+        <input id="email" name="email" type="email" autocomplete="email" value={form?.email ?? ""} maxlength="254" required />
+
+        <label for="message">Your message</label>
+        <textarea id="message" name="message" rows="6" minlength="10" maxlength="2000" required>{form?.message ?? ""}</textarea>
+
+        <!-- Real people never see this. Bots fill in every field, and anything sent here is thrown away. -->
+        <div class="trap" aria-hidden="true">
+            <label for="website">Leave this empty</label>
+            <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
+        </div>
+
+        {#if form?.error}<p class="error" role="alert">{form.error}</p>{/if}
+        <button disabled={busy}>{busy ? "Sending…" : "Send message"}</button>
+        <p class="muted" style="font-size:0.9rem">We use your address and message only to answer you. See our <a href="/privacy">Privacy Policy</a>.</p>
+    </form>
+{/if}
 
 <h2>Common questions</h2>
 
@@ -25,4 +65,4 @@
 <p>Use the app (profile, Settings, Delete account and data) or our <a href="/delete-account">deletion page</a>.</p>
 
 <h3>I found a security problem</h3>
-<p>Please email us before sharing it publicly so we can fix it.</p>
+<p>Please send us a message on this page before sharing it publicly, so we can fix it.</p>

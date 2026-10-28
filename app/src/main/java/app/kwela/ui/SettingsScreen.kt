@@ -115,8 +115,8 @@ fun SettingsScreen(
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                val support = BuildConfig.SUPPORT_EMAIL
-                SmallCard("Help and feedback", "Questions or ideas? Write to us.", Modifier.weight(1f)) { if (support.isNotBlank()) sendEmail(context, support, "Kwela feedback (${BuildConfig.VERSION_NAME})") }
+                val support = supportPageUrl()
+                SmallCard("Help and feedback", "Questions or ideas? Send us a message.", Modifier.weight(1f)) { if (support.isNotBlank()) openUrl(context, support) }
                 SmallCard("About Kwela", "Version, privacy and licences", Modifier.weight(1f)) { showAbout = true }
             }
             Spacer(Modifier.height(16.dp))

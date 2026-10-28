@@ -12,7 +12,7 @@
 
 <p>
     This policy explains what the Kwela app and website ("Kwela", "we") collect about you, why, and what you can do about it. We have tried to say it
-    in plain words. If anything is unclear, write to <a href="mailto:{site.supportEmail}">{site.supportEmail}</a>.
+    in plain words. If anything is unclear, send us a message on the <a href="/support">Support page</a>.
 </p>
 
 <h2>What we collect</h2>
@@ -52,7 +52,12 @@
         <tr id="tester-sign-up">
             <td><strong>Tester sign-up</strong> (the email address and phone number you give on the Try Kwela early page, and the time you agreed to be contacted)</td>
             <td>To invite you to test Kwela and to contact you by email, phone call or WhatsApp, including to ask how you look for jobs and apply for them. You choose to give it by ticking a box, and you can ask us to delete it at any time.</td>
-            <td>Our Cloudflare database. Only we can read it. It is not shared with anyone, not used for advertising, and not linked to your Kwela account. We keep it until the test ends or you ask us to delete it, whichever is first. Email <a href="mailto:{site.supportEmail}">{site.supportEmail}</a> from the address you signed up with. A keyed hash of your IP address is kept in the rate-limit table below to stop repeated sign-ups.</td>
+            <td>Our Cloudflare database. Only we can read it. It is not shared with anyone, not used for advertising, and not linked to your Kwela account. We keep it until the test ends or you ask us to delete it, whichever is first. Send a message on the <a href="/support">Support page</a>, from the address you signed up with. A keyed hash of your IP address is kept in the rate-limit table below to stop repeated sign-ups.</td>
+        </tr>
+        <tr id="support-messages">
+            <td><strong>Messages to Support</strong> (the email address and message you send on the Support page)</td>
+            <td>To answer you. We do not use them for anything else.</td>
+            <td>Our Cloudflare database. Only we can read it. It is not shared with anyone and not linked to your Kwela account. We keep a message until we have answered it and any follow-up is finished, then delete it. Ask us to delete yours at any time with another message. A keyed hash of your IP address is kept in the rate-limit table below to stop repeated messages.</td>
         </tr>
         <tr>
             <td><strong>Sign-in rate-limit keys</strong> (keyed hashes based on your email address and, when available, IP address)</td>
@@ -113,6 +118,7 @@
         account so that deleting and re-creating an account cannot be used to get around those limits.
     </li>
     <li>Tester sign-ups are kept until the test ends or you ask us to delete them.</li>
+    <li>Messages to Support are kept until we have answered them and any follow-up is finished, or you ask us to delete them.</li>
     <li>Rate-limit records contain keyed hashes and request counts. They have no automatic deletion job yet.</li>
     <li>Chats and documents on your phone stay there until you delete them, delete your account in the app, or uninstall Kwela.</li>
 </ul>
@@ -123,7 +129,7 @@
 </p>
 <ul>
     <li><strong>Delete your account:</strong> in the app, open your profile, then Settings, then Delete account and data. Or use our <a href="/delete-account">deletion page</a> if you no longer have the app.</li>
-    <li><strong>Anything else:</strong> email <a href="mailto:{site.supportEmail}">{site.supportEmail}</a> from the address on your account and we will reply.</li>
+    <li><strong>Anything else:</strong> send a message on the <a href="/support">Support page</a>, using the address on your account, and we will reply.</li>
     <li>
         <strong>Complaints:</strong> you can complain to the {site.regulator.name}: <a href="{site.regulator.url}" rel="noreferrer">{site.regulator.url}</a>.
     </li>
@@ -146,4 +152,4 @@
 <p>If we change this policy in a way that matters, we will update the date above and tell you in the app.</p>
 
 <h2>Contact</h2>
-<p>Kwela · <a href="mailto:{site.supportEmail}">{site.supportEmail}</a></p>
+<p>Kwela · <a href="/support">Support page</a></p>

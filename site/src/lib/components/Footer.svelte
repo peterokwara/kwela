@@ -30,7 +30,7 @@
             </div>
             <div class="text-sm text-gray-700 lg:w-72">
                 <p class="text-base font-semibold text-gray-900">Questions?</p>
-                <p class="mt-1">Write to <a href="mailto:{site.supportEmail}" class="text-teal-700 underline underline-offset-4">{site.supportEmail}</a> and we will reply.</p>
+                <p class="mt-1">Send us a message on the <a href="/support" class="text-teal-700 underline underline-offset-4">Support page</a> and we will reply.</p>
             </div>
         </div>
         <div class="flex flex-col items-center border-t border-gray-200 pt-8 pb-12 md:flex-row-reverse md:justify-between md:pt-6">

@@ -1,6 +1,5 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
-    import { site } from "#lib/config.ts";
     import Button from "#lib/components/Button.svelte";
     import CirclesBackground from "#lib/components/CirclesBackground.svelte";
 
@@ -43,7 +42,7 @@
                         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="h-8 w-8"><path d="M6 12.5l4 4 8-9" class="stroke-teal-700" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
                     </span>
                     <h2 class="mt-6 text-2xl font-medium tracking-tight text-gray-900">Asante, we have your details</h2>
-                    <p class="mt-3 text-base text-gray-600">We will be in touch about trying Kwela. If you change your mind, email <a href="mailto:{site.supportEmail}" class="text-teal-700 underline underline-offset-4">{site.supportEmail}</a> and we will delete them.</p>
+                    <p class="mt-3 text-base text-gray-600">We will be in touch about trying Kwela. If you change your mind, tell us on the <a href="/support" class="text-teal-700 underline underline-offset-4">Support page</a> and we will delete them.</p>
                 </div>
             {:else}
                 <form method="POST" action="?/join" use:enhance={submitting}>

@@ -11,6 +11,7 @@ People sign in with their email address and a 6-digit code (no passwords). `POST
 | Method | Path | What it does |
 | --- | --- | --- |
 | GET | `/health` | Returns `{ "ok": true }`. No token needed. |
+| POST | `/contact` | Messages from the website's Support page. Takes `{ email, message, website }`. Same `x-signup-token` rule and protections as `/signup`. See [Support messages](#support-messages). |
 | POST | `/signup` | Tester sign-ups from the website's Try Kwela early page. Takes `{ email, phone, consent, website }`. Needs the `x-signup-token` header (the shared `SIGNUP_SECRET`), so only the Kwela site can use it. See [Tester sign-ups](#tester-sign-ups). |
 | POST | `/auth/request-code` | Takes `{ email }` and emails a 6-digit code (valid 10 minutes, 3 requests per 15 minutes per address and 10 requests per 15 minutes per source IP). |
 | POST | `/auth/verify` | Takes `{ email, code }` (5 tries per code) and returns `{ token, email }`. |
@@ -84,6 +85,17 @@ Read the sign-ups yourself (newest first), export them, or delete one person:
 pnpm exec wrangler d1 execute kwela --remote --command "SELECT email, phone, datetime(created_at/1000,'unixepoch') AS signed_up FROM tester_signups ORDER BY created_at DESC"
 pnpm exec wrangler d1 execute kwela --remote --command "DELETE FROM tester_signups WHERE email = 'person@example.com'"
 ```
+
+## Support messages
+
+The website's Support page has a contact form instead of a public email address, so the address cannot be scraped for spam. It sends to `POST /contact`, which is protected the same way as sign-ups (shared `SIGNUP_SECRET`, per-address and total rate limits, a hidden bot field, server-side checks, no route to read messages back). Messages go to the `support_messages` D1 table. Nothing is emailed to you: read them yourself.
+
+```sh
+pnpm exec wrangler d1 execute kwela --remote --command "SELECT datetime(created_at/1000,'unixepoch') AS sent, email, message FROM support_messages ORDER BY created_at DESC LIMIT 20"
+pnpm exec wrangler d1 execute kwela --remote --command "DELETE FROM support_messages WHERE id = '<id>'"
+```
+
+Reply from your own mail to the address in the row. Delete a message once it is answered, as the privacy policy says.
 
 ## Deploy
 

@@ -7,6 +7,8 @@ import { AllowlistedTestOtpMailer, CloudflareOtpMailer, LogOtpMailer, SelectingO
 import { createChatPostHandler } from "./lib/server/services/chatPostHandlerService.ts";
 import { D1CandidateProfileStoreService, type CandidateProfileDatabase } from "./lib/server/services/d1CandidateProfileStoreService.ts";
 import { D1TesterSignupStoreService, type TesterSignupDatabase } from "./lib/server/services/d1TesterSignupStoreService.ts";
+import { D1SupportMessageStoreService } from "./lib/server/services/d1SupportMessageStoreService.ts";
+import { createSupportMessageService } from "./lib/server/services/supportMessageService.ts";
 import { createTesterSignupService } from "./lib/server/services/testerSignupService.ts";
 import { D1UsageLimitService, type UsageDatabase } from "./lib/server/services/d1UsageLimitService.ts";
 import { createOpenAICareerAssistantService } from "./lib/server/services/openAICareerAssistantService.ts";
@@ -63,7 +65,7 @@ export interface Env {
     /** Fixed private-test code. Only accepted for AUTH_TEST_EMAILS addresses. Remove before public production. */
     AUTH_TEST_CODE?: string;
     /**
-     * Secret the Kwela website sends with tester sign-ups. The sign-up form stays closed while this is empty. Set as a Worker secret.
+     * Secret the Kwela website sends with its forms (tester sign-ups and Support messages). The forms stay closed while this is empty. Set as a Worker secret.
      */
     SIGNUP_SECRET?: string;
     /**
@@ -157,6 +159,7 @@ export default {
                 return postChat({ request: chatRequest, ownerId });
             },
             signups: createTesterSignupService({ store: new D1TesterSignupStoreService(env.DB as unknown as TesterSignupDatabase), secret: env.AUTH_SECRET, siteToken: env.SIGNUP_SECRET?.trim() || undefined }),
+            contact: createSupportMessageService({ store: new D1SupportMessageStoreService(env.DB as unknown as TesterSignupDatabase), secret: env.AUTH_SECRET, siteToken: env.SIGNUP_SECRET?.trim() || undefined }),
             profiles: new D1CandidateProfileStoreService(env.DB as unknown as CandidateProfileDatabase),
             chatRuns: new D1ChatRunService(env.DB, env.RUN_INPUTS, env.CHAT_RUNS),
             setAnalyticsEnabled: (ownerId, enabled) => setAnalyticsOptOut(analyticsDatabase, ownerId, enabled),

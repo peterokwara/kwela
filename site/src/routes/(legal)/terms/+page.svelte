@@ -66,4 +66,4 @@
 <p>We may update these terms. If a change matters, we will update the date above and tell you in the app. Using Kwela after a change means you accept it.</p>
 
 <h2>Contact</h2>
-<p>Kwela · <a href="mailto:{site.supportEmail}">{site.supportEmail}</a></p>
+<p>Kwela · <a href="/support">Support page</a></p>

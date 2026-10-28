@@ -94,7 +94,8 @@ html { background: var(--color-gray-50); -webkit-font-smoothing: antialiased; }
 .legal .card { background: white; border-radius: 1.5rem; padding: 1.5rem 1.75rem; margin: 1.5rem 0; box-shadow: 0 25px 50px -12px rgb(23 23 23 / 0.1); }
 .legal label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--color-gray-900); margin: 1rem 0 0.4rem; }
 .legal input[type="email"], .legal input[type="text"], .legal input[type="tel"] { display: block; width: 100%; max-width: 26rem; border-radius: 0.5rem; border: 1px solid var(--color-gray-200); background: white; padding: 0.5rem 0.75rem; color: var(--color-gray-900); }
-.legal input:focus { border-color: var(--color-teal-500); --tw-ring-color: var(--color-teal-500); }
+.legal textarea { display: block; width: 100%; max-width: 40rem; border-radius: 0.5rem; border: 1px solid var(--color-gray-200); background: white; padding: 0.5rem 0.75rem; color: var(--color-gray-900); font: inherit; }
+.legal input:focus, .legal textarea:focus { border-color: var(--color-teal-500); --tw-ring-color: var(--color-teal-500); }
 .legal button { margin-top: 1.25rem; border-radius: 0.5rem; background: var(--color-gray-800); color: white; padding: 0.55rem 1.1rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
 .legal button:hover { background: var(--color-gray-900); }
 .legal button.danger { background: #b42318; }
