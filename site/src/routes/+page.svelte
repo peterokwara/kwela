@@ -11,6 +11,10 @@
     questions. You read them, change what you want, and send them yourself. Kwela never submits an application for you.
 </p>
 
+<p>
+    <a href="/join" style="display:inline-block;padding:0.8rem 1.6rem;border-radius:999px;background:var(--accent);color:var(--accent-fg);font-weight:600;text-decoration:none">Try Kwela early</a>
+</p>
+
 <div class="card">
     <h2 style="margin-top:0">Good to know</h2>
     <ul>

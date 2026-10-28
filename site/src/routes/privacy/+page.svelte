@@ -49,6 +49,11 @@
             <td>To enforce free-use limits and stop abuse.</td>
             <td>Our database.</td>
         </tr>
+        <tr id="tester-sign-up">
+            <td><strong>Tester sign-up</strong> (the email address and phone number you give on the Try Kwela early page, and the time you agreed to be contacted)</td>
+            <td>To invite you to test Kwela and to contact you by email, phone call or WhatsApp, including to ask how you look for jobs and apply for them. You choose to give it by ticking a box, and you can ask us to delete it at any time.</td>
+            <td>Our Cloudflare database. Only we can read it. It is not shared with anyone, not used for advertising, and not linked to your Kwela account. We keep it until the test ends or you ask us to delete it, whichever is first. Email <a href="mailto:{site.supportEmail}">{site.supportEmail}</a> from the address you signed up with. A keyed hash of your IP address is kept in the rate-limit table below to stop repeated sign-ups.</td>
+        </tr>
         <tr>
             <td><strong>Sign-in rate-limit keys</strong> (keyed hashes based on your email address and, when available, IP address)</td>
             <td>To limit repeated code requests and prevent abuse.</td>
@@ -107,6 +112,7 @@
         Usage records are kept for as long as we need them to enforce limits. They use an internal account ID and stay after you delete your
         account so that deleting and re-creating an account cannot be used to get around those limits.
     </li>
+    <li>Tester sign-ups are kept until the test ends or you ask us to delete them.</li>
     <li>Rate-limit records contain keyed hashes and request counts. They have no automatic deletion job yet.</li>
     <li>Chats and documents on your phone stay there until you delete them, delete your account in the app, or uninstall Kwela.</li>
 </ul>

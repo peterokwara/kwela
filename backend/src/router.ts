@@ -39,6 +39,13 @@ export interface IRouterDependencies {
         deleteOwner(ownerId: string): Promise<void>;
     };
     /**
+     * Records people who ask to test Kwela from the website. Omit to answer 503. The service also stays closed until its secret is set.
+     */
+    signups?: {
+        check(token: string): Promise<{ ok: true } | { ok: false; status: number; message: string }>;
+        submit(body: unknown, context: { sourceIp?: string; token: string }): Promise<{ ok: true } | { ok: false; status: number; message: string }>;
+    };
+    /**
      * Saved CV profiles, one per owner.
      */
     profiles: ICandidateProfileStoreService;
@@ -60,6 +67,30 @@ export interface IRouterDependencies {
     setAnalyticsEnabled?(ownerId: string, enabled: boolean): Promise<void>;
 }
 
+const MAX_SIGNUP_BODY_CHARS = 2000;
+
+/** Reads at most `limit` characters of a request body, stopping as soon as it is too long.
+ * @param request Incoming request.
+ * @param limit Most characters to accept.
+ * @returns The text, or null when the body is longer than the limit.
+ */
+async function readLimitedText(request: Request, limit: number): Promise<string | null> {
+    const declared = Number(request.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > limit * 4) return null;
+    if (!request.body) return "";
+    const reader = request.body.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return text + decoder.decode();
+        text += decoder.decode(value, { stream: true });
+        if (text.length > limit) {
+            await reader.cancel();
+            return null;
+        }
+    }
+}
 const tokenPattern = /^Bearer ([A-Za-z0-9_-]{32,128})$/;
 
 /** Builds a JSON response in the shape every Kwela error uses.
@@ -182,9 +213,34 @@ export function createRouter(deps: IRouterDependencies): (request: Request) => P
         return result.ok ? json({ token: result.token, email: result.email, analyticsId: result.analyticsId, analyticsInternal: result.analyticsInternal }) : json({ message: result.message }, result.status);
     }
 
+    /** Handles a tester sign-up from the Kwela website. It has no sign-in, so the service checks the site token and rate limits itself. */
+    async function signupRoute(request: Request): Promise<Response> {
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+        if (!deps.signups) return json({ message: "Sign-ups are not open yet." }, 503);
+        const token = request.headers.get("x-signup-token") ?? "";
+        const allowed = await deps.signups.check(token);
+        if (!allowed.ok) return json({ message: allowed.message }, allowed.status);
+        const text = await readLimitedText(request, MAX_SIGNUP_BODY_CHARS);
+        if (text === null) return json({ message: "That request is too large." }, 413);
+        let body: unknown = null;
+        try {
+            body = JSON.parse(text);
+        } catch {
+            body = null;
+        }
+        if (!body || typeof body !== "object" || Array.isArray(body)) return json({ message: "Enter your email address and phone number." }, 400);
+        const result = await deps.signups.submit(body, {
+            // The site is the only caller with the token and it reads the visitor's address from Cloudflare, so this header can be trusted here.
+            sourceIp: request.headers.get("x-client-ip") ?? undefined,
+            token
+        });
+        return result.ok ? json({ ok: true }) : json({ message: result.message }, result.status);
+    }
+
     return async (request) => {
         const { pathname } = new URL(request.url);
         if (pathname === "/health") return json({ ok: true });
+        if (pathname === "/signup") return signupRoute(request);
         if (pathname.startsWith("/auth/")) return authRoute(request, pathname);
         if (!pathname.startsWith("/api/")) return json({ message: "Not found." }, 404);
 

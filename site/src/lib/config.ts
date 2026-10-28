@@ -4,6 +4,6 @@
 export const site = {
     name: "Kwela",
     supportEmail: "ojakaapeter@gmail.com",
-    lastUpdated: "25 October 2026",
+    lastUpdated: "28 October 2026",
     regulator: { name: "Office of the Data Protection Commissioner (Kenya)", url: "https://www.odpc.go.ke" }
 } as const;

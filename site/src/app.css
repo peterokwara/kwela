@@ -30,7 +30,7 @@ p, li { max-width: 68ch; }
 .muted { color: var(--muted); }
 .card { background: var(--card); border-radius: 20px; padding: 1.25rem 1.5rem; margin: 1.25rem 0; }
 label { display: block; font-weight: 600; margin: 1rem 0 0.35rem; }
-input[type="email"], input[type="text"] { width: 100%; max-width: 26rem; padding: 0.8rem 1rem; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; }
+input[type="email"], input[type="text"], input[type="tel"] { width: 100%; max-width: 26rem; padding: 0.8rem 1rem; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; }
 button { padding: 0.8rem 1.6rem; border-radius: 999px; border: 0; background: var(--accent); color: var(--accent-fg); font: inherit; font-weight: 600; cursor: pointer; margin-top: 1rem; }
 button.danger { background: var(--danger); color: var(--bg); }
 button:disabled { opacity: 0.6; cursor: default; }
@@ -39,3 +39,4 @@ button:disabled { opacity: 0.6; cursor: default; }
 .check input { margin-top: 0.4rem; }
 table { border-collapse: collapse; width: 100%; max-width: 68ch; margin: 1rem 0; }
 th, td { text-align: left; vertical-align: top; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--line); font-size: 0.95rem; }
+.trap { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }

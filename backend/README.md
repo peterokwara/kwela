@@ -11,6 +11,7 @@ People sign in with their email address and a 6-digit code (no passwords). `POST
 | Method | Path | What it does |
 | --- | --- | --- |
 | GET | `/health` | Returns `{ "ok": true }`. No token needed. |
+| POST | `/signup` | Tester sign-ups from the website's Try Kwela early page. Takes `{ email, phone, consent, website }`. Needs the `x-signup-token` header (the shared `SIGNUP_SECRET`), so only the Kwela site can use it. See [Tester sign-ups](#tester-sign-ups). |
 | POST | `/auth/request-code` | Takes `{ email }` and emails a 6-digit code (valid 10 minutes, 3 requests per 15 minutes per address and 10 requests per 15 minutes per source IP). |
 | POST | `/auth/verify` | Takes `{ email, code }` (5 tries per code) and returns `{ token, email }`. |
 | POST | `/auth/sign-out` | Revokes the session token. |
@@ -55,6 +56,34 @@ pnpm run deploy
 ```
 
 `EMAIL_FROM` and `ZEPTOMAIL_API_URL` are configuration values, not credentials. In email mode, only `AUTH_TEST_EMAILS` can request codes until the allow-list check is removed deliberately. In private-test mode, codes are returned only to allowed app clients; do not use this mode for public production.
+
+## Tester sign-ups
+
+The website's `/join` page collects an email address and phone number from people who want to test Kwela, with a ticked consent box. The site Worker sends them to `POST /signup` through its service binding, with the visitor's address in `x-client-ip` and a shared secret in `x-signup-token`.
+
+How it is protected:
+
+- **Closed unless configured.** The route answers 503 until `SIGNUP_SECRET` is set, and 403 for any request without the matching token (compared in constant time). Setting the token on the API Worker only is not enough: the site needs the same value.
+- **Rate limited.** 5 sign-ups per hour per visitor address, kept as a keyed hash in `login_rate_limits`, never the address itself. A hidden form field catches simple bots: they are told it worked and nothing is saved.
+- **Checked on the server.** The email is validated and lower-cased. The phone number is turned into international format (`+2547…`) and anything that is not a reachable number is refused. Consent must be exactly `true`; the time it was given is stored.
+- **Nothing is readable over HTTP.** No route returns sign-ups, and a repeat sign-up gets the same answer as a new one, so the form cannot be used to check who has signed up. Replies are never cached.
+- **Kept small, never overwritten.** Only email, phone, consent time and sign-up time are stored, in the `tester_signups` D1 table, one row per email and phone pair. Nothing is verified, so a stranger who types someone else's email adds a row beside theirs and cannot change it. Treat every row as a claim: your first message should confirm the person is who they say. A shared cap of 200 sign-ups an hour backs up the per-address limit. Rows are not linked to Kwela accounts, and deleting an account does not remove them: delete a person by hand when they ask.
+
+Set it up (use the same random value, 32 or more characters, in both Workers):
+
+```sh
+pnpm run db:migrate:remote
+openssl rand -base64 32          # copy this value
+pnpm exec wrangler secret put SIGNUP_SECRET            # in backend/
+pnpm exec wrangler secret put SIGNUP_SECRET            # in site/
+```
+
+Read the sign-ups yourself (newest first), export them, or delete one person:
+
+```sh
+pnpm exec wrangler d1 execute kwela --remote --command "SELECT email, phone, datetime(created_at/1000,'unixepoch') AS signed_up FROM tester_signups ORDER BY created_at DESC"
+pnpm exec wrangler d1 execute kwela --remote --command "DELETE FROM tester_signups WHERE email = 'person@example.com'"
+```
 
 ## Deploy
 

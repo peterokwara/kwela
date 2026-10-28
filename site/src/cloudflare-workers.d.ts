@@ -1,3 +1,3 @@
 declare module "cloudflare:workers" {
-    export const env: { API: { fetch(input: string, init?: RequestInit): Promise<Response> } };
+    export const env: { API: { fetch(input: string, init?: RequestInit): Promise<Response> }; SIGNUP_SECRET?: string };
 }
