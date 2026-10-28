@@ -1,6 +1,7 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
-    import { site } from "#lib/config.ts";
+    import Button from "#lib/components/Button.svelte";
+    import Field from "#lib/components/Field.svelte";
 
     let { form } = $props();
     let busy = $state(false);
@@ -12,8 +13,11 @@
     function submitting() {
         busy = true;
         return async ({ update }: { update: () => Promise<void> }) => {
-            await update();
-            busy = false;
+            try {
+                await update();
+            } finally {
+                busy = false;
+            }
         };
     }
 </script>
@@ -47,24 +51,22 @@
         <h2 style="margin-top:0">Enter the code</h2>
         <p>We sent a 6-digit code to <strong>{email}</strong>. It works for 10 minutes.</p>
         <input type="hidden" name="email" value={email} />
-        <label for="code">6-digit code</label>
-        <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required />
-        <label class="check">
-            <input type="checkbox" name="confirm" value="yes" />
+        <Field label="6-digit code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required class="mt-6" />
+        <label class="mt-6 flex items-start gap-3 text-sm text-gray-700">
+            <input type="checkbox" name="confirm" value="yes" class="mt-1 h-4 w-4 rounded border-gray-300 text-red-700 focus:ring-red-600" />
             <span>Yes, permanently delete my Kwela account and saved CV profile.</span>
         </label>
-        {#if form?.message}<p class="error" role="alert">{form.message}</p>{/if}
-        <button class="danger" disabled={busy}>{busy ? "Deleting…" : "Delete my account"}</button>
+        {#if form?.message}<p class="mt-6 text-sm font-semibold text-red-700" role="alert">{form.message}</p>{/if}
+        <Button type="submit" color="red" class="mt-8 w-full" disabled={busy}>{busy ? "Deleting…" : "Delete my account"}</Button>
     </form>
     <p class="muted"><a href="/delete-account">Start again with a different email</a></p>
 {:else}
     <form method="POST" action="?/request" use:enhance={submitting} class="card">
         <h2 style="margin-top:0">Step 1: confirm it is you</h2>
         <p>Enter the email address on your Kwela account. We will send you a code.</p>
-        <label for="email">Email address</label>
-        <input id="email" name="email" type="email" autocomplete="email" value={email} required />
-        {#if form?.message}<p class="error" role="alert">{form.message}</p>{/if}
-        <button disabled={busy}>{busy ? "Sending…" : "Send me a code"}</button>
+        <Field label="Email address" name="email" type="email" autocomplete="email" value={email} required class="mt-6" />
+        {#if form?.message}<p class="mt-6 text-sm font-semibold text-red-700" role="alert">{form.message}</p>{/if}
+        <Button type="submit" color="gray" class="mt-8 w-full" disabled={busy}>{busy ? "Sending…" : "Send me a code"}</Button>
     </form>
 {/if}
 

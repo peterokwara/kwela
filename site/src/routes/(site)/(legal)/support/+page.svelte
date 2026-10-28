@@ -1,5 +1,8 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
+    import Button from "#lib/components/Button.svelte";
+    import Field from "#lib/components/Field.svelte";
+    import Honeypot from "#lib/components/Honeypot.svelte";
 
     let { form } = $props();
     let busy = $state(false);
@@ -32,21 +35,15 @@
     </div>
 {:else}
     <form method="POST" action="?/send" use:enhance={submitting} class="card">
-        <label for="email">Your email address</label>
-        <input id="email" name="email" type="email" autocomplete="email" value={form?.email ?? ""} maxlength="254" required />
+        <div class="grid grid-cols-1 gap-6">
+            <Field label="Your email address" name="email" type="email" autocomplete="email" value={form?.email ?? ""} maxlength="254" required />
+            <Field label="Your message" name="message" multiline value={form?.message ?? ""} minlength="10" maxlength="2000" required />
 
-        <label for="message">Your message</label>
-        <textarea id="message" name="message" rows="6" minlength="10" maxlength="2000" required>{form?.message ?? ""}</textarea>
-
-        <!-- Real people never see this. Bots fill in every field, and anything sent here is thrown away. -->
-        <div class="trap" aria-hidden="true">
-            <label for="website">Leave this empty</label>
-            <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
+            <Honeypot />
         </div>
-
-        {#if form?.error}<p class="error" role="alert">{form.error}</p>{/if}
-        <button disabled={busy}>{busy ? "Sending…" : "Send message"}</button>
-        <p class="muted" style="font-size:0.9rem">We use your address and message only to answer you. See our <a href="/privacy">Privacy Policy</a>.</p>
+        {#if form?.error}<p class="mt-6 text-sm font-semibold text-red-700" role="alert">{form.error}</p>{/if}
+        <Button type="submit" color="teal" class="mt-8 w-full" disabled={busy}>{busy ? "Sending…" : "Send message"}</Button>
+        <p class="mt-4 text-sm text-gray-500">We use your address and message only to answer you. See our <a href="/privacy">Privacy Policy</a>.</p>
     </form>
 {/if}
 

@@ -55,7 +55,7 @@
     --color-teal-300: #7bdcd1;
     --color-teal-400: #47c4b8;
     --color-teal-500: #18aa9d;
-    --color-teal-600: #118a81;
+    --color-teal-600: #0e8279;
     --color-teal-700: #126f69;
     --color-teal-800: #135856;
     --color-teal-900: #134947;
@@ -86,23 +86,13 @@ html { background: var(--color-gray-50); -webkit-font-smoothing: antialiased; }
 .legal { color: var(--color-gray-700); }
 .legal h1 { font-size: 2.5rem; line-height: 3rem; font-weight: 500; letter-spacing: -0.025em; color: var(--color-gray-900); margin: 0 0 0.5rem; }
 .legal h2 { font-size: 1.25rem; line-height: 1.75rem; font-weight: 600; color: var(--color-gray-900); margin: 2.5rem 0 0.5rem; }
+.legal h3 { font-size: 1.05rem; line-height: 1.75rem; font-weight: 600; color: var(--color-gray-900); margin: 1.75rem 0 0.1rem; }
 .legal p, .legal li { max-width: 68ch; line-height: 1.75; }
 .legal p { margin: 0.9rem 0; }
 .legal ul { list-style: disc; padding-left: 1.4rem; margin: 0.9rem 0; }
 .legal a { color: var(--color-teal-700); text-decoration: underline; text-underline-offset: 3px; }
 .legal .muted { color: var(--color-gray-500); }
 .legal .card { background: white; border-radius: 1.5rem; padding: 1.5rem 1.75rem; margin: 1.5rem 0; box-shadow: 0 25px 50px -12px rgb(23 23 23 / 0.1); }
-.legal label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--color-gray-900); margin: 1rem 0 0.4rem; }
-.legal input[type="email"], .legal input[type="text"], .legal input[type="tel"] { display: block; width: 100%; max-width: 26rem; border-radius: 0.5rem; border: 1px solid var(--color-gray-200); background: white; padding: 0.5rem 0.75rem; color: var(--color-gray-900); }
-.legal textarea { display: block; width: 100%; max-width: 40rem; border-radius: 0.5rem; border: 1px solid var(--color-gray-200); background: white; padding: 0.5rem 0.75rem; color: var(--color-gray-900); font: inherit; }
-.legal input:focus, .legal textarea:focus { border-color: var(--color-teal-500); --tw-ring-color: var(--color-teal-500); }
-.legal button { margin-top: 1.25rem; border-radius: 0.5rem; background: var(--color-gray-800); color: white; padding: 0.55rem 1.1rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
-.legal button:hover { background: var(--color-gray-900); }
-.legal button.danger { background: #b42318; }
-.legal button:disabled { opacity: 0.6; cursor: default; }
-.legal .error { color: #b42318; font-weight: 600; }
-.legal .check { display: flex; gap: 0.6rem; align-items: flex-start; font-weight: 400; margin-top: 1.25rem; }
-.legal .check input { margin-top: 0.4rem; }
 .legal table { border-collapse: collapse; width: 100%; max-width: 68ch; margin: 1rem 0; }
 .legal th, .legal td { text-align: left; vertical-align: top; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--color-gray-200); font-size: 0.95rem; }
 .trap { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
