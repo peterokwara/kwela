@@ -61,9 +61,7 @@ fun LoginScreen(
             googleSheetOpen = true
             analytics.track(AnalyticsEvents.googleButtonClick)
             try {
-                val sheet = GoogleSignIn.requestBottomSheet(activity, allAccounts = true)
-                val result = if (sheet == GoogleSignInResult.NoCredential) GoogleSignIn.requestToken(activity) else sheet
-                when (result) {
+                when (val result = GoogleSignIn.requestToken(activity)) {
                     is GoogleSignInResult.Token -> onGoogleToken(result.idToken, result.photoUrl)
                     GoogleSignInResult.Dismissed, GoogleSignInResult.NoCredential -> Unit
                     is GoogleSignInResult.Failed -> onGoogleProblem(result.message)

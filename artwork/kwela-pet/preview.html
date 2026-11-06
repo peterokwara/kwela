@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kwela pet states</title>
+<style>
+  body { margin: 0; padding: 2rem; background: #f7f5e9; color: #302824; font: 16px system-ui, sans-serif; }
+  h1 { font-size: 1.5rem; }
+  .states { display: flex; flex-wrap: wrap; gap: 2rem; }
+  figure { margin: 0; width: min(240px, 100%); }
+  img { width: 100%; display: block; }
+  figcaption { margin-top: .6rem; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Kwela pet</h1>
+<p>Idle, working, and finished. Reduced-motion settings show still illustrations.</p>
+<div class="states">
+  <figure><picture><source srcset="idle-still.svg" media="(prefers-reduced-motion: reduce)"><img src="idle.svg" alt="Kwela facing forward"></picture><figcaption>Idle</figcaption></figure>
+  <figure><picture><source srcset="working-still.svg" media="(prefers-reduced-motion: reduce)"><img src="working.svg" alt="Kwela reading a document"></picture><figcaption>Working</figcaption></figure>
+  <figure><picture><source srcset="finished-still.svg" media="(prefers-reduced-motion: reduce)"><img src="finished.svg" alt="Kwela holding a finished document"></picture><figcaption>Finished</figcaption></figure>
+</div>
+</body>
+</html>

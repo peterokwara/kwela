@@ -48,6 +48,8 @@ import app.kwela.domain.TaskRunSnapshot
 import app.kwela.domain.TaskStatus
 import app.kwela.domain.ThemeMode
 import android.net.Uri
+import androidx.core.content.FileProvider
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -391,6 +393,29 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         else mutableState.value.copy(pendingAttachment = PendingAttachment(file.name, uriString))
     }
 
+    /** A photo shared from another app (a job poster from WhatsApp or Instagram). The grant ends with the share, so keep our own copy. */
+    fun acceptSharedImage(uri: Uri) {
+        setScreen(AppScreen.CHAT)
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val kept = withContext(Dispatchers.IO) { runCatching { copySharedImage(app, uri) }.getOrNull() }
+            if (kept == null) mutableState.value = mutableState.value.copy(message = "Kwela could not open that photo.")
+            else attachFile(kept.toString())
+        }
+    }
+
+    private fun copySharedImage(app: Application, uri: Uri): Uri? {
+        val picked = AttachmentReader(app).describe(uri)
+        if (picked.sizeBytes > 0 && !AttachmentPolicy.isSmallEnough(picked.sizeBytes)) return uri
+        val extension = picked.name.substringAfterLast('.', "").lowercase().ifBlank {
+            when (picked.mediaType) { "image/png" -> "png"; "image/webp" -> "webp"; else -> "jpg" }
+        }
+        val folder = File(app.cacheDir, "shared").apply { mkdirs() }
+        val target = File(folder, "job-${System.currentTimeMillis()}.$extension")
+        app.contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { input.copyTo(it) } } ?: return null
+        return FileProvider.getUriForFile(app, "${app.packageName}.fileprovider", target)
+    }
+
     fun acceptSharedText(rawText: String?) {
         val payload = SharedPayloadParser.parse(rawText) ?: return
         viewModelScope.launch { repository.savePendingSharedText(payload.value) }
@@ -468,6 +493,7 @@ class KwelaViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             WorkManager.getInstance(getApplication<Application>()).cancelUniqueWork(ReplyWorker.UNIQUE)
             repository.sessionToken()?.let { api.signOut(it) }
+            GoogleSignIn.clearCredentialState(getApplication())
             repository.signOut()
             analytics.reset()
             mutableState.value = mutableState.value.copy(screen = AppScreen.CHAT)

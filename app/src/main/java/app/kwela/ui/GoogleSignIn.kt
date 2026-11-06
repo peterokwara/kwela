@@ -1,12 +1,15 @@
 package app.kwela.ui
 
 import android.app.Activity
+import android.content.Context
 import android.util.Log
+import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.ClearCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import app.kwela.BuildConfig
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -31,10 +34,18 @@ object GoogleSignIn {
     suspend fun requestToken(activity: Activity): GoogleSignInResult = request(activity, false, false)
 
     /** Offer previously authorised accounts first, then all accounts when none are available. */
-    suspend fun requestBottomSheet(activity: Activity, allAccounts: Boolean = false): GoogleSignInResult {
-        if (allAccounts) return request(activity, true, false)
+    suspend fun requestBottomSheet(activity: Activity): GoogleSignInResult {
         val authorised = request(activity, true, true)
         return if (authorised == GoogleSignInResult.NoCredential) request(activity, true, false) else authorised
+    }
+
+    /** Let credential providers offer all accounts after the person signs out. */
+    suspend fun clearCredentialState(context: Context) {
+        try {
+            CredentialManager.create(context).clearCredentialState(ClearCredentialStateRequest())
+        } catch (error: ClearCredentialException) {
+            Log.w("KwelaGoogleSignIn", "Could not clear credential state", error)
+        }
     }
 
     private suspend fun request(activity: Activity, bottomSheet: Boolean, authorisedOnly: Boolean): GoogleSignInResult {

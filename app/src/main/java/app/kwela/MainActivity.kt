@@ -17,6 +17,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.IntentCompat
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
@@ -133,13 +134,19 @@ class MainActivity : ComponentActivity() {
     }
 
     fun receiveSharedIntent(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val type = intent.type.orEmpty()
+        if (type.startsWith("text/")) {
+            sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+        } else if (type.startsWith("image/")) {
+            sharedImage = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
         }
     }
 
     companion object {
         var sharedText by mutableStateOf<String?>(null)
+        var sharedImage by mutableStateOf<Uri?>(null)
     }
 }
 
@@ -152,6 +159,13 @@ private fun KwelaApp(vm: KwelaViewModel = viewModel()) {
         if (shared != null) {
             vm.acceptSharedText(shared)
             MainActivity.sharedText = null
+        }
+    }
+    val sharedImage = MainActivity.sharedImage
+    LaunchedEffect(sharedImage) {
+        if (sharedImage != null) {
+            vm.acceptSharedImage(sharedImage)
+            MainActivity.sharedImage = null
         }
     }
     LaunchedEffect(state.message) {

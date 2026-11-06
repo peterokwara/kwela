@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-labelledby="title desc">
+<title id="title">Reading pose</title><desc id="desc">The avatar leans forward and looks down toward an open document.</desc>
+<defs><clipPath id="crop"><circle cx="200" cy="200" r="190"/></clipPath></defs>
+<g clip-path="url(#crop)" stroke-linecap="round" stroke-linejoin="round">
+<path fill="#18aa9d" d="M0 0h400v400H0z"/>
+<!-- shoulders lean toward the page -->
+<path d="M-5 401 Q10 341 58 318 Q94 299 139 291 L235 291 Q297 293 335 323 Q370 350 405 401Z" fill="#e90037" stroke="#fff" stroke-width="9"/>
+<!-- scarf, tilted forward -->
+<path d="M63 320 Q82 304 90 285 Q78 259 82 224 Q86 166 123 123 Q159 81 210 89 Q263 95 291 130 Q317 163 315 205 Q313 244 295 276 Q280 302 262 324 Q244 348 219 357 Q194 365 169 352 Q130 332 105 315 Q91 307 83 307Z" fill="#85b4ed" stroke="#fff" stroke-width="9"/>
+<!-- face and glasses rotate with the head -->
+<g transform="rotate(19 204 204)"><animateTransform attributeName="transform" type="rotate" values="19 204 204;24 204 204;24 204 204;19 204 204" keyTimes="0;0.3;0.72;1" dur="4s" repeatCount="indefinite"/>
+<path d="M143 182 C148 150 169 120 195 113 C219 106 242 119 258 140 C275 161 280 185 277 211 C274 240 260 268 243 282 C225 297 201 299 181 287 C158 274 145 247 140 218 C138 205 139 194 143 182Z" fill="#49332d" stroke="#f7f5e9" stroke-width="6"/>
+<path d="M119 165 C127 160 139 164 152 168 C170 174 183 177 197 175 C210 173 217 177 228 177 C244 178 260 170 278 170 C287 170 297 172 301 177 C305 182 300 187 296 192 L277 213 C269 222 262 227 254 226 C244 225 234 216 224 212 C216 208 209 207 202 211 C191 216 183 225 172 226 C158 227 148 221 141 213 C131 202 120 189 114 180 C110 174 113 168 119 165Z" fill="#17191a" stroke="#242120" stroke-width="10"/>
+<path d="M119 165 C127 160 139 164 152 168 C170 174 183 177 197 175 C210 173 217 177 228 177 C244 178 260 170 278 170 C287 170 297 172 301 177 C305 182 300 187 296 192 L277 213 C269 222 262 227 254 226 C244 225 234 216 224 212 C216 208 209 207 202 211 C191 216 183 225 172 226 C158 227 148 221 141 213 C131 202 120 189 114 180 C110 174 113 168 119 165Z" fill="none" stroke="#f7f5e9" stroke-width="6"/>
+</g>
+<!-- hands support an open document -->
+<path d="M78 380 Q75 361 85 350 Q94 341 106 347 L119 360 L118 388 M320 380 Q323 361 313 350 Q304 341 292 347 L279 360 L280 388" fill="#49332d" stroke="#fff" stroke-width="6"/>
+<g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 -3;0 0" keyTimes="0;0.3;0.72;1" dur="4s" repeatCount="indefinite"/><path d="M91 337 Q146 322 199 349 Q252 322 308 337 L308 395 Q248 383 199 405 Q150 383 91 395Z" fill="#f7f5e9" stroke="#302824" stroke-width="6"/>
+<path d="M199 349v54 M108 350q34-5 69 9 M108 363q34-4 69 9 M221 359q34-14 70-9 M221 372q34-13 70-9" fill="none" stroke="#92a9ad" stroke-width="4"/>
+<g opacity="0"><animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.46;0.48;0.72;0.74;1" dur="4s" repeatCount="indefinite"/><path d="M199 349 Q247 329 303 339 L303 392 Q250 382 199 403Z" fill="#f7f5e9" stroke="#302824" stroke-width="3"><animate attributeName="d" values="M199 349 Q247 329 303 339 L303 392 Q250 382 199 403Z;M199 349 Q223 302 235 329 L235 386 Q217 391 199 403Z;M199 349 Q170 302 105 339 L105 392 Q153 382 199 403Z" keyTimes="0;0.6;1" dur="4s" repeatCount="indefinite"/></path></g></g></g><circle cx="200" cy="200" r="190" fill="none" stroke="#f7f5e9" stroke-width="10"/>
+</svg>
